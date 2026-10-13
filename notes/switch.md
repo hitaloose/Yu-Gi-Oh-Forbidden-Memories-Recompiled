@@ -49,11 +49,14 @@ slot** choosing the slot. A state is tied to the exact `.nro` that made it
 
 ### What differs from the PC builds
 
-- **Data mods only.** Horizon gives homebrew no executable memory of its own,
-  so code mods do not load (`MEMORIES_NO_CODE_MODS`). Texture packs (the HD
-  pack too), card, fusion, drop and text mods work (**Game > Mods**);
-  3D Monsters, Hand Camera, AI Hard Mode and Yamyi Mods do not. The release
-  ZIP ships Drop Missing Cards only.
+- **Code mods are linked in.** Horizon gives homebrew no executable memory
+  of its own, so a mod's code is never loaded from the SD card. The
+  repository's code mods (3D Monsters, AI Hard Mode, Hand Camera, Yamyi
+  Mods) are built into the `.nro` instead, and are turned on and off in
+  **Game > Mods** as elsewhere; their folders in `mods/` hold `mod.json` and
+  data. Any other code mod stays off, with "is a code mod this game was not
+  built with" beside it. Texture packs (the HD pack too), card, fusion,
+  drop and text mods work. The release ZIP ships all five repository mods.
 - **HD pack:** put `assets-hd` in `sdmc:/switch/yfm-redecomp/mods/`. At
   internal 1x it is resampled to the console's size and hardly shows; pick
   **Video > Resolution > Internal 2x** or higher. 4x is heavy for the
@@ -105,13 +108,36 @@ GCC links with libnx's `switch.specs`, and `elf2nro` packs the result with
   file, and the port saves by writing aside and renaming over
   (`src/pc/platform/switch_posix.c`).
 - `-Wl,--build-id=sha1`: names the build for save states.
-- `-DMEMORIES_NO_CODE_MODS`: see above.
+- `-DMEMORIES_BUILTIN_CODE_MODS`: code mods are linked in, see below.
 - `src/pc/compat/switch/` stands in for what newlib and libnx lack:
   `sys/mman.h` (anonymous mappings from the heap), fontconfig (the system's
   shared font) and SDL3 (`SDL3/sdl3_shim.h` over SDL2,
   `src/pc/platform/switch_sdl3.c`). It stays out of the mod SDK.
 - libnx's `switch.ld` defines `__start__` as an absolute 0, not moved with
   the image: the image's start is crt0's `_start`.
+
+### Code mods
+
+`build_arm64.py` (`link_builtin_mods`) builds each `mods/*` whose
+`mod.json` has a `library` through the macOS mod pipeline's guest
+translation (`build_mod_arm64.build_builtin`), against this build's
+`summary.json` and `mod_signatures.json`. Each mod's objects and its
+registration are merged with `ld -r`; `MemoriesModInit` becomes
+`MemoriesModInit__<id>` and every other name the mod defines is made local
+(`objcopy --keep-global-symbol`), so mods collide neither with each other
+nor with the game. `builtin_mods.c`, beside the `.nro`, is the table
+(`src/pc/mods/builtin_mods.h`): library, entry, the globals' registration
+and a hash of the object for save states. `mods.c` reads `"library"` (or
+`"libraries": {"switch": ...}`) as a row of it (`ObjectLoader_LoadBuiltin`).
+The table also carries each mod's folder (its tracked files, no source):
+at every start `Switch_EarlyInit` writes them into `mods/`
+(`BuiltinMods_Install`) where a file is missing or differs, so the `.nro`
+alone lists its mods in **Game > Mods**, and a new `.nro` updates their
+`mod.json`. `--no-builtin-mods` builds without them; `package_switch.py` then ships no
+code mod's folder. Objects are cached in `tmp/pc/switch/mods/`.
+
+Hooks need nothing more: the translated game's hooks are typed wrappers
+(`ARM64_HOOKS`, `src/pc/mods/hooks.c`), not patched code.
 
 ### Memory
 

@@ -1661,6 +1661,7 @@ by `build_mod.py`:
 | `x86_64-windows` | `<library>.x86_64-windows.o` | the 64-bit Windows game (`-windows-x64.zip`) |
 | `aarch64` | `<library>.aarch64.o` | the arm64 Android game |
 | `macos` | `<library>.dylib` | the macOS ARM64 game; built only with `--target macos` (see [Native macOS ARM64 code mods](#native-macos-arm64-code-mods)) |
+| `switch` | none: linked into the `.nro` | the Nintendo Switch homebrew, which loads no code; only the repository's mods, built with the game ([Switch](switch.md#code-mods)) |
 
 The `i386` object runs on both 32-bit games: both are 32-bit x86 code with
 the same calling convention, so the machine code is the same, and the game

@@ -11,16 +11,19 @@ Two files, both from the same .nro:
       user/) on its first start (src/pc/platform/switch.c).
   yfm-redecomp-<version>-switch.zip  unpacked onto the SD card's root:
       switch/yfm-redecomp.nro, and switch/yfm-redecomp/ with the official
-      European languages' text, the data mods the release ships, an empty
+      European languages' text, the mods the release ships, an empty
       game/ for the player's disc image, README.txt and LICENSE.
 
-The Switch build runs no code mods (MEMORIES_NO_CODE_MODS,
-tools/pc/switch_deps.py): only the shipped mods without a "library" go in.
-Nothing from the game's discs is included."""
+The Switch build loads no code: the repository's code mods are linked into
+the .nro (MEMORIES_BUILTIN_CODE_MODS, src/pc/mods/builtin_mods.h), and
+their folders here hold only mod.json and data. A code mod goes in only
+when the .nro beside its builtin_mods.c links it (a --no-builtin-mods build
+ships the data mods alone). Nothing from the game's discs is included."""
 
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import zipfile
@@ -69,9 +72,12 @@ Log of the last start: sdmc:/switch/yfm-redecomp/log.txt
 
 Mods
 ----
+Turn mods on and off in the Mods menu. The ones in
+sdmc:/switch/yfm-redecomp/mods/ come with this release; their code
+(3D Monsters, AI Hard Mode, Hand Camera, Yamyi Mods) is part of the .nro.
 Data mods (texture packs, card and drop changes) work: put each one's
-folder in sdmc:/switch/yfm-redecomp/mods/ and turn it on in the Mods menu.
-Mods that contain code do not run on the Switch.
+folder in the same mods/ folder. Other mods that contain code do not run
+on the Switch.
 """
 
 
@@ -83,16 +89,27 @@ def nro_check(path):
     return data
 
 
-def shipped_mods():
-    """The repository's own data mods: their tracked files, never a
-    locally installed mod, and no mod that carries a library."""
+def linked_libraries(nro):
+    """The code mods the .nro links: the libraries of the builtin_mods.c
+    the build wrote beside it (tools/pc/build_arm64.py)."""
+    table = nro.parent / "builtin_mods.c"
+    if not table.is_file():
+        return set()
+    return set(re.findall(r'^    \{"([^"]+)", MemoriesModInit__', table.read_text(), re.M))
+
+
+def shipped_mods(linked=frozenset()):
+    """The repository's own mods: their tracked files, never a locally
+    installed mod, and no source. A mod that carries a library goes in only
+    when the .nro links it."""
     tracked = subprocess.check_output(["git", "ls-files", "-z", "mods"], cwd=ROOT, text=True).split("\0")
     files = [Path(name) for name in tracked if name]
     code = set()
     for name in files:
         if name.name == "mod.json":
             manifest = json.loads((ROOT / name).read_text(encoding="utf-8-sig"))
-            if manifest.get("library"):
+            library = manifest.get("library")
+            if library and library.removesuffix(".o") not in linked:
                 code.add(name.parent)
     return [name for name in files
             if name.parent not in code and not any(parent in code for parent in name.parents)
@@ -113,7 +130,7 @@ def package(nro, out, version):
         zipped.writestr(f"{FOLDER}/mods/", "")
         for language in sorted((ROOT / "languages").glob("*.txt")):
             zipped.write(language, f"{FOLDER}/languages/{language.name}")
-        for name in shipped_mods():
+        for name in shipped_mods(linked_libraries(nro)):
             zipped.write(ROOT / name, f"{FOLDER}/{name.as_posix()}")
     for path in (plain, archive):
         digest = hashlib.sha256(path.read_bytes()).hexdigest()

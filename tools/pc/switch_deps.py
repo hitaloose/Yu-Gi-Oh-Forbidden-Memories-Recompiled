@@ -54,7 +54,9 @@ def compile_flags():
         "-ffunction-sections",
         "-fdata-sections",
         "-D__SWITCH__",
-        "-DMEMORIES_NO_CODE_MODS",   # no executable memory of its own on Horizon: data mods only
+        # No executable memory of its own on Horizon: the repository's code
+        # mods are linked in (build_mod_arm64.build_builtin, builtin_mods.h).
+        "-DMEMORIES_BUILTIN_CODE_MODS",
         # Stand-ins for what newlib/libnx lack: sys/mman.h, fontconfig, SDL3.
         "-I" + str(ROOT / "src/pc/compat/switch"),
         "-isystem", str(LIBNX / "include"),
@@ -65,6 +67,14 @@ def compile_flags():
 
 def nm():
     return str(A64 / "bin/aarch64-none-elf-nm")
+
+
+def ld():
+    return str(A64 / "bin/aarch64-none-elf-ld")
+
+
+def objcopy():
+    return str(A64 / "bin/aarch64-none-elf-objcopy")
 
 
 def link(objects, output):

@@ -85,8 +85,15 @@ def validate_imports(text, signatures):
     return has_entry
 
 
-def compile_units(sources, folder, compiler, sdk, flags, aliases, signatures, pins):
-    """Compile original C at O0, lower guest accesses, then generate O2 objects."""
+def compile_units(sources, folder, compiler, sdk, flags, aliases, signatures, pins,
+                  object_flags=None, unit_prefix="MemoriesModRegisterUnit_"):
+    """Compile original C at O0, lower guest accesses, then generate O2 objects.
+
+    object_flags replace the macOS ones for the O2 step (the Switch:
+    switch_deps.compile_flags()); unit_prefix names each unit's registration
+    routine, unique per mod where several are linked into one game."""
+    if object_flags is None:
+        object_flags = ["-isysroot", sdk, f"-mmacosx-version-min={MACOS_MINIMUM}"]
     objects, routines = [], []
     has_entry = False
     for index, source in enumerate(sources):
@@ -95,7 +102,7 @@ def compile_units(sources, folder, compiler, sdk, flags, aliases, signatures, pi
             [compiler, *flags, "-S", "-emit-llvm", str(source), "-o", str(raw)],
             check=True,
         )
-        routine = f"MemoriesModRegisterUnit_{index}"
+        routine = f"{unit_prefix}{index}"
         text = normalize(raw.read_text(), aliases)
         has_entry = validate_imports(text, signatures) or has_entry
         text = normalize(
@@ -116,9 +123,7 @@ def compile_units(sources, folder, compiler, sdk, flags, aliases, signatures, pi
         subprocess.run(
             [
                 compiler,
-                "-isysroot",
-                sdk,
-                f"-mmacosx-version-min={MACOS_MINIMUM}",
+                *object_flags,
                 "-O2",
                 "-c",
                 str(ir),
@@ -134,21 +139,26 @@ def compile_units(sources, folder, compiler, sdk, flags, aliases, signatures, pi
     return objects, routines
 
 
-def link_library(folder, library_name, objects, routines, compiler, sdk, exported):
-    """Pair global registration/cleanup and reject imports absent from the game."""
-    registration = folder / "registration.c"
-    registration.write_text(
+def registration_source(routines, suffix=""):
+    """MemoriesModRegisterGlobals/UnregisterGlobals over each unit's routine."""
+    return (
         "".join(
             f"extern void {name}(void); extern void {name}_Unregister(void);\n"
             for name in routines
         )
-        + "void MemoriesModRegisterGlobals(void) {\n"
+        + f"void MemoriesModRegisterGlobals{suffix}(void) {{\n"
         + "".join(f"{name}();\n" for name in routines)
         + "}\n"
-        + "void MemoriesModUnregisterGlobals(void) {\n"
+        + f"void MemoriesModUnregisterGlobals{suffix}(void) {{\n"
         + "".join(f"{name}_Unregister();\n" for name in reversed(routines))
         + "}\n"
     )
+
+
+def link_library(folder, library_name, objects, routines, compiler, sdk, exported):
+    """Pair global registration/cleanup and reject imports absent from the game."""
+    registration = folder / "registration.c"
+    registration.write_text(registration_source(routines))
     staged = folder / library_name
     staged.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -193,6 +203,158 @@ def link_library(folder, library_name, objects, routines, compiler, sdk, exporte
     if missing:
         raise SystemExit("ARM64 game does not provide: " + ", ".join(sorted(missing)))
     return staged
+
+
+def builtin_symbol(mod_id):
+    """The C suffix a linked-in mod's entry points take: its id, as C."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", mod_id)
+
+
+def build_builtin(directory, build, *, compiler, host_flags, aliases, signatures, pins, tools):
+    """One code mod as a relocatable object to link into a game that cannot
+    load code (the Switch, builtin_mods.h).
+
+    The units are translated as for build(); then they and the registration
+    are merged (ld -r), MemoriesModInit becomes MemoriesModInit__<symbol>,
+    and every other name the mod defines is made local, so that no two mods
+    and no mod and the game collide. tools holds "ld" and "objcopy" for the
+    target. Returns (library, symbol, object, hash)."""
+    directory = Path(directory).resolve()
+    sources = sorted(directory.glob("*.c"))
+    if not sources:
+        raise SystemExit(f"{directory}: no C sources")
+    manifest = json.loads((directory / "mod.json").read_text(encoding="utf-8-sig"))
+    library = manifest.get("library")
+    if not library or "/" in library or "." in library.removesuffix(".o"):
+        raise SystemExit(f"{directory}: a linked-in mod's library must be a plain name")
+    library = library.removesuffix(".o")
+    symbol = builtin_symbol(manifest.get("id") or directory.name)
+    flags = [
+        *guest_frontend_flags(None, host=host_flags),
+        "-fno-common",
+        "-DMEMORIES_MOD",
+        "-I" + str(directory),
+        "-Wno-gnu-folding-constant",
+        "-Wno-pointer-to-int-cast",
+    ]
+    key = hashlib.sha256(
+        json.dumps(
+            {
+                "flags": flags,
+                "compiler": compiler,
+                "sources": [
+                    (path.name, hashlib.sha256(path.read_bytes()).hexdigest())
+                    for path in sources
+                ],
+                "headers": hashlib.sha256(
+                    b"".join(
+                        path.read_bytes()
+                        for path in sorted(directory.glob("*.h"))
+                    )
+                ).hexdigest(),
+                "manifest": hashlib.sha256((directory / "mod.json").read_bytes()).hexdigest(),
+                "aliases": aliases,
+                "signatures": signatures,
+                "pins": pins,
+                "tools": [
+                    hashlib.sha256(path.read_bytes()).hexdigest()
+                    for path in (
+                        Path(__file__),
+                        ROOT / "tools/pc/llvm_guest.py",
+                        ROOT / "tools/pc/llvm/guest_ir.cpp",
+                        ROOT / "tools/pc/guest_build.py",
+                    )
+                ],
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    folder = Path(build) / "mods" / f"{symbol}-{key[:16]}"
+    final = folder / f"{symbol}.o"
+    if not final.is_file():
+        folder.mkdir(parents=True, exist_ok=True)
+        objects, routines = compile_units(
+            sources, folder, compiler, None, flags, aliases, signatures, pins,
+            object_flags=host_flags, unit_prefix=f"MemoriesModRegisterUnit_{symbol}_",
+        )
+        registration = folder / "registration.c"
+        registration.write_text(registration_source(routines, "__" + symbol))
+        subprocess.run(
+            [compiler, *host_flags, "-O2", "-c", str(registration), "-o", str(folder / "registration.o")],
+            check=True,
+        )
+        merged, renamed = folder / "merged.o", folder / "renamed.o"
+        subprocess.run(
+            [tools["ld"], "-r", "-o", str(merged), *objects, str(folder / "registration.o")],
+            check=True,
+        )
+        entries = [
+            f"MemoriesModInit__{symbol}",
+            f"MemoriesModRegisterGlobals__{symbol}",
+            f"MemoriesModUnregisterGlobals__{symbol}",
+        ]
+        subprocess.run(
+            [tools["objcopy"], f"--redefine-sym=MemoriesModInit={entries[0]}", str(merged), str(renamed)],
+            check=True,
+        )
+        staged = folder / f".{symbol}.o"
+        subprocess.run(
+            [tools["objcopy"], *[f"--keep-global-symbol={name}" for name in entries], str(renamed), str(staged)],
+            check=True,
+        )
+        staged.replace(final)
+    digest = int(hashlib.sha256(final.read_bytes()).hexdigest()[:8], 16)
+    print(f"{final}: {library}, {len(sources)} translated source(s), linked in", flush=True)
+    return library, symbol, final, digest
+
+
+def builtin_files(directory):
+    """A linked-in mod's folder as the Switch writes it (builtin_mods.h):
+    its tracked files under mods/, without sources."""
+    directory = Path(directory).resolve()
+    tracked = subprocess.check_output(
+        ["git", "ls-files", "-z", "--", str(directory)], cwd=ROOT, text=True
+    ).split("\0")
+    files = []
+    for name in sorted(name for name in tracked if name):
+        path = ROOT / name
+        if path.suffix in (".c", ".h", ".o", ".dylib") or not path.is_file():
+            continue
+        files.append((path.relative_to(directory.parent).as_posix(), path.read_bytes()))
+    return files
+
+
+def builtin_table(mods, files=()):
+    """builtin_mods.c: the rows of builtin_mods.h for build_builtin's mods,
+    and their folders' files (builtin_files)."""
+    lines = ['#include "pc/mods/builtin_mods.h"\n']
+    for _, symbol, _, _ in mods:
+        lines.append(
+            f"int MemoriesModInit__{symbol}(const MemoriesModHost *, MemoriesMod *);\n"
+            f"void MemoriesModRegisterGlobals__{symbol}(void);\n"
+            f"void MemoriesModUnregisterGlobals__{symbol}(void);\n"
+        )
+    lines.append("const MemoriesBuiltinMod Memories_BuiltinMods[] = {\n")
+    for library, symbol, _, digest in mods:
+        lines.append(
+            f'    {{"{library}", MemoriesModInit__{symbol}, MemoriesModRegisterGlobals__{symbol}, '
+            f"MemoriesModUnregisterGlobals__{symbol}, 0x{digest:08x}u}},\n"
+        )
+    if not mods:
+        lines.append("    {0, 0, 0, 0, 0},\n")
+    lines.append("};\n")
+    lines.append(f"const unsigned Memories_BuiltinModCount = {len(mods)};\n")
+    for index, (_, data) in enumerate(files):
+        body = ",".join(str(byte) for byte in data) or "0"
+        lines.append(f"static const unsigned char builtin_file_{index}[] = {{{body}}};\n")
+    lines.append("const MemoriesBuiltinModFile Memories_BuiltinModFiles[] = {\n")
+    for index, (path, data) in enumerate(files):
+        lines.append(f"    {{{json.dumps(path)}, builtin_file_{index}, {len(data)}u}},\n")
+    if not files:
+        lines.append("    {0, 0, 0},\n")
+    lines.append("};\n")
+    lines.append(f"const unsigned Memories_BuiltinModFileCount = {len(files)};\n")
+    return "".join(lines)
 
 
 def build(directory, out=None, *, game=None):

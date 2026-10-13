@@ -448,6 +448,16 @@ if(BUILD_TESTING)
     target_include_directories(memories_mods_manager_test PRIVATE src)
     target_link_libraries(memories_mods_manager_test PRIVATE m Threads::Threads)
     add_test(NAME pc_mods_manager COMMAND memories_mods_manager_test)
+    # Code mods linked into the game (MEMORIES_BUILTIN_CODE_MODS, the Switch,
+    # src/pc/mods/builtin_mods.h) instead of loaded from a file.
+    add_executable(memories_mods_builtin_test tests/pc/mods_builtin_test.c ${MOD_TEST_SOURCES})
+    target_compile_definitions(memories_mods_builtin_test PRIVATE MEMORIES_BUILTIN_CODE_MODS)
+    target_include_directories(memories_mods_builtin_test PRIVATE src)
+    target_link_libraries(memories_mods_builtin_test PRIVATE m Threads::Threads)
+    if(NOT MSVC)
+        target_compile_options(memories_mods_builtin_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+    add_test(NAME pc_mods_builtin COMMAND memories_mods_builtin_test)
     # What enabled mods change in common (src/pc/mods/overlap.c): the mods in
     # tests/pc/mod_overlaps, whose lines the FM Editor's check must find too.
     add_executable(memories_mods_overlap_test tests/pc/mods_overlap_test.c src/pc/mods/overlap.c src/pc/mods/json.c

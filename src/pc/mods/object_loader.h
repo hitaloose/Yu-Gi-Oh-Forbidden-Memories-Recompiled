@@ -25,8 +25,12 @@
  * name (`<library>.<target>.o`; the 32-bit games' is `<library>.o`). The
  * macOS ARM64 game links a dylib instead (build_mod.py --target macos,
  * ObjectLoader_LoadPath, `<library>.dylib`): its "libraries" key is "macos",
- * so an Android object named under "aarch64" is never handed to it. */
-#if defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED)
+ * so an Android object named under "aarch64" is never handed to it. A game
+ * with its code mods linked in (MEMORIES_BUILTIN_CODE_MODS, the Switch,
+ * builtin_mods.h) loads no file: its "libraries" key is "switch". */
+#if defined(MEMORIES_BUILTIN_CODE_MODS)
+#define OBJECT_LOADER_TARGET "switch"
+#elif defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED)
 #define OBJECT_LOADER_TARGET "macos"
 #elif defined(__x86_64__) && defined(_WIN32)
 #define OBJECT_LOADER_TARGET "x86_64-windows"
@@ -54,6 +58,7 @@ typedef struct {
      * out, so a rebuild that makes the same code hashes the same. */
     uint32_t hash;
     void *native_handle;   /* macOS ARM64 dylib, retained while callbacks exist */
+    const struct MemoriesBuiltinMod *builtin;   /* a mod linked into the game */
 } LoadedObject;
 
 /* Returns 0 and fills `object`, or -1 with the reason in `error`. */
@@ -64,6 +69,11 @@ void *ObjectLoader_Symbol(const LoadedObject *object, const char *name);
 /* Gives the memory back. The game never does this for a mod (code it may
  * still hold pointers into); the tests do. */
 void ObjectLoader_Free(LoadedObject *object);
+#ifdef MEMORIES_BUILTIN_CODE_MODS
+/* The mod linked into the game under `library` (".o" ignored): registers
+ * its globals and fills `object`, or returns -1 with the reason. */
+int ObjectLoader_LoadBuiltin(const char *library, LoadedObject *object, char *error, size_t error_size);
+#endif
 #if defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED)
 int ObjectLoader_LoadPath(const char *path, LoadedObject *object, char *error, size_t error_size);
 #endif

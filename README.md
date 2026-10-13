@@ -76,8 +76,9 @@ game** (hold **R** while starting any game): from the album it gets too little m
   shows, **L** / **R** switch menus, the D-pad moves and the controller drives the menus,
   not the game. Taps on the bar work too.
 - **L3** (press the left stick) turns fast forward on, and off on the next press.
-- Data mods only (the HD pack included: pick **Internal 2x** or more for it to show); mods
-  with code do not run on the Switch.
+- 3D Monsters, AI Hard Mode, Hand Camera and Yamyi Mods are built into the `.nro`; data mods
+  work as elsewhere (the HD pack included: pick **Internal 2x** or more for it to show).
+  Other mods with code do not run on the Switch.
 
 Building, the memory layout and packaging: [Nintendo Switch](notes/switch.md).
 

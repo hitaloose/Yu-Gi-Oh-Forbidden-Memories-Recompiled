@@ -6,6 +6,7 @@
 #include "platform.h"
 #include "paths.h"
 #include "pc/memory_map.h"
+#include "pc/mods/builtin_mods.h"
 #include "pc/compat/fs.h"
 #include <switch.h>
 #include <netinet/in.h>
@@ -183,6 +184,13 @@ int Switch_EarlyInit(char *why, size_t size)
     }
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+    {
+        /* The linked-in code mods' folders (mod.json), which the Mods menu
+         * lists: the .nro alone brings them, and a new one updates them. */
+        int written = BuiltinMods_Install(PATHS_SWITCH_DIR "/mods");
+        if (written < 0) fprintf(stderr, "memories-pc: mods: could not write the built-in mods' folders\n");
+        else if (written) fprintf(stderr, "memories-pc: mods: wrote %d built-in mod file(s)\n", written);
+    }
     return check_layout(why, size);
 }
 

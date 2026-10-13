@@ -28,6 +28,7 @@
 #include "modapi.h"
 #include "exports.h"
 #include "object_loader.h"
+#include "builtin_mods.h"
 #include "json.h"
 #include "manifest_code.h"
 #include "events.h"
@@ -1137,6 +1138,7 @@ int Mods_PrintExports(void)
 
 /* --- loading --------------------------------------------------------- */
 
+#ifndef MEMORIES_BUILTIN_CODE_MODS   /* a linked-in mod binds at the game's link */
 static void *resolve(const char *name, void *context)
 {
     (void)context;
@@ -1164,11 +1166,22 @@ static void register_symbols(Mod *mod)
     free(entries);
     free(names);
 }
+#endif
 
 /* The mod's object file, read whole and handed to the loader. */
 static void *load_object(Mod *mod, const char *path)
 {
-#if defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED)
+#if defined(MEMORIES_BUILTIN_CODE_MODS)
+    /* Linked into the game (builtin_mods.h): nothing to read. */
+    char error[STATUS_MAX];
+    (void)path;
+    if (ObjectLoader_LoadBuiltin(mod->library, &mod->object, error, sizeof(error))) {
+        note(mod, "%s %s", mod->library, error);
+        return NULL;
+    }
+    mod->code_hash = mod->object.hash;
+    return ObjectLoader_Symbol(&mod->object, "MemoriesModInit");
+#elif defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED)
     char error[STATUS_MAX];
     if (ObjectLoader_LoadPath(path, &mod->object, error, sizeof(error))) {
         note(mod, "%s %s", mod->library, error);
@@ -1213,9 +1226,13 @@ static void *load_object(Mod *mod, const char *path)
 }
 
 #if !defined(MEMORIES_NO_CODE_MODS) && !(defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED))
-/* Whether the mod's object for this game is there to load. */
+/* Whether the mod's object for this game is there to load: in a game with
+ * its code mods linked in, whether this one is. */
 static int library_present(const Mod *mod)
 {
+#ifdef MEMORIES_BUILTIN_CODE_MODS
+    return BuiltinMods_Find(mod->library) != NULL;
+#else
     char path[PATH_MAX_];
     FILE *file;
     if (snprintf(path, sizeof(path), "%s/%s", mod->directory, mod->library) >= (int)sizeof(path)) return 0;
@@ -1223,6 +1240,7 @@ static int library_present(const Mod *mod)
     if (!file) return 0;
     fclose(file);
     return 1;
+#endif
 }
 #endif
 
@@ -1232,7 +1250,7 @@ static int load_library(Mod *mod)
     MemoriesModEntry entry;
     union { void *pointer; int (*function)(const MemoriesModHost *, MemoriesMod *); } symbol;
     if (!mod->library[0]) return 1;   /* data only: nothing to load */
-    if (mod->object.image || mod->object.native_handle) return 1;
+    if (mod->object.image || mod->object.native_handle || mod->object.builtin) return 1;
     if (snprintf(path, sizeof(path), "%s/%s", mod->directory, mod->library) >= (int)sizeof(path)) return 0;
     symbol.pointer = load_object(mod, path);
     if (!symbol.pointer) return 0;
@@ -1375,7 +1393,13 @@ static int read_manifest(Mod *mod, const char *directory, const char *origin)
                 note(mod, "\"library\": %s is outside the mod", text);
             } else if (named && *named) {
                 copy_text(mod->library, sizeof(mod->library), text);
-#if defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED)
+#if defined(MEMORIES_BUILTIN_CODE_MODS)
+            } else {
+                /* A row of the game's own (builtin_mods.h): the name alone. */
+                size_t stem = strlen(text);
+                if (stem > 2 && !strcmp(text + stem - 2, ".o")) stem -= 2;
+                snprintf(mod->library, sizeof(mod->library), "%.*s", (int)stem, text);
+#elif defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED)
             } else if (strchr(text, '.')) {
                 /* The macOS game links a dylib (build_mod.py --target macos):
                  * "x.o" means x.dylib; a name with another extension is kept. */
@@ -1777,8 +1801,10 @@ static void activate_once(int index, int on)
          * which object is missing. */
 #if !(defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED))
         if (strcmp(OBJECT_LOADER_TARGET, "i386") && !mod->broken && mod->library[0] && !mod->object.image &&
-            !mod->object.native_handle && !library_present(mod)) {
-#ifdef __ANDROID__
+            !mod->object.native_handle && !mod->object.builtin && !library_present(mod)) {
+#if defined(MEMORIES_BUILTIN_CODE_MODS)
+            note(mod, "is a code mod this game was not built with: its code mods are linked in, not loaded");
+#elif defined(__ANDROID__)
             note(mod, "needs an Android build of this mod: it has no %s", mod->library);
 #else
             note(mod, "needs a 64-bit build of this mod (%s): the one it has is for the 32-bit game, which is the one "
@@ -1856,7 +1882,7 @@ static Mod *at(int index);
 static int untouched(const Mod *mod)
 {
     return !mod->active && !mod->initialized && !mod->data_prepared && !mod->runtime_options && !mod->sequence &&
-           !mod->object.image && !mod->object.native_handle;
+           !mod->object.image && !mod->object.native_handle && !mod->object.builtin;
 }
 int Mods_InUse(int index) { return at(index) && !untouched(&mods[index]); }
 int Mods_Discover(const char *directory, int *later)

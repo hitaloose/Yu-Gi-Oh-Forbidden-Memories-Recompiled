@@ -15,7 +15,9 @@
 #define MEMORIES_TRANSLATED_MMAN_IMPLEMENTATION
 #endif
 #include "object_loader.h"
+#include "builtin_mods.h"
 #include "pc/compat/mman.h"
+#include "pc/platform/paths.h"
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -1007,8 +1009,9 @@ int ObjectLoader_Load(const void *data, size_t size, ObjectResolver resolve, voi
     memset(object, 0, sizeof(*object));
     memset(&loader, 0, sizeof(loader));
     loader.file = data;
-#ifdef MEMORIES_NO_CODE_MODS
-    /* Mods.c refuses code mods before this, in a build made without them. */
+#if defined(MEMORIES_NO_CODE_MODS) || defined(MEMORIES_BUILTIN_CODE_MODS)
+    /* Mods.c refuses code mods before this, in a build made without them,
+     * and takes a linked-in one from ObjectLoader_LoadBuiltin. */
     snprintf(error, error_size, "code mods are not loaded by this game yet");
     return result;
 #endif
@@ -1075,6 +1078,10 @@ void *ObjectLoader_Symbol(const LoadedObject *object, const char *name)
     if (object && object->native_handle && name) return dlsym(object->native_handle, name);
 #endif
     size_t i;
+    if (object && object->builtin) {
+        union { MemoriesModEntry function; void *pointer; } entry = {object->builtin->init};
+        return name && !strcmp(name, "MemoriesModInit") ? entry.pointer : NULL;
+    }
     for (i = 0; object && name && i < object->symbol_count; i++) {
         if (object->symbols[i].global && !strcmp(object->symbols[i].name, name)) {
             return (void *)object->symbols[i].address;
@@ -1085,6 +1092,7 @@ void *ObjectLoader_Symbol(const LoadedObject *object, const char *name)
 
 void ObjectLoader_Free(LoadedObject *object)
 {
+    if (object->builtin && object->builtin->unregister_globals) object->builtin->unregister_globals();
 #if defined(__APPLE__) && defined(__aarch64__) && defined(MEMORIES_TRANSLATED)
     if (object->native_handle) {
         void (*cleanup)(void) = dlsym(object->native_handle, "MemoriesModUnregisterGlobals");
@@ -1143,5 +1151,86 @@ int ObjectLoader_LoadPath(const char *path, LoadedObject *object, char *error, s
 invalid:
     if (error_size) snprintf(error, error_size, "requires a macOS ARM64 dylib (build_mod.py --target macos)");
     return -1;
+}
+#endif
+
+const MemoriesBuiltinMod *BuiltinMods_Find(const char *library)
+{
+    size_t length;
+    unsigned i, count;
+    if (!library || !Memories_BuiltinMods || !&Memories_BuiltinModCount) return NULL;
+    length = strlen(library);
+    if (length > 2 && !strcmp(library + length - 2, ".o")) length -= 2;
+    count = Memories_BuiltinModCount;
+    for (i = 0; i < count; i++) {
+        const char *name = Memories_BuiltinMods[i].library;
+        if (name && strlen(name) == length && !strncmp(name, library, length)) return &Memories_BuiltinMods[i];
+    }
+    return NULL;
+}
+
+#ifdef MEMORIES_BUILTIN_CODE_MODS
+/* Whether `path` holds exactly `size` bytes of `data`. */
+static int same_file(const char *path, const unsigned char *data, unsigned size)
+{
+    unsigned char buffer[4096];
+    unsigned at = 0;
+    size_t count;
+    int same = 1;
+    FILE *file = fopen(path, "rb");
+    if (!file) return 0;
+    while (same && (count = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+        if (count > size - at || memcmp(buffer, data + at, count)) same = 0;
+        else at += (unsigned)count;
+    }
+    if (ferror(file)) same = 0;
+    fclose(file);
+    return same && at == size;
+}
+
+int BuiltinMods_Install(const char *mods_directory)
+{
+    unsigned i, count;
+    int written = 0;
+    if (!mods_directory || !Memories_BuiltinModFiles || !&Memories_BuiltinModFileCount) return 0;
+    count = Memories_BuiltinModFileCount;
+    for (i = 0; i < count; i++) {
+        const MemoriesBuiltinModFile *entry = &Memories_BuiltinModFiles[i];
+        char path[1024];
+        char *slash;
+        FILE *file;
+        if (snprintf(path, sizeof(path), "%s/%s", mods_directory, entry->path) >= (int)sizeof(path)) return -1;
+        if (same_file(path, entry->data, entry->size)) continue;
+        slash = strrchr(path, '/');
+        if (slash) {
+            *slash = '\0';
+            Paths_MakeDirs(path);
+            *slash = '/';
+        }
+        file = fopen(path, "wb");
+        if (!file) return -1;
+        if (fwrite(entry->data, 1, entry->size, file) != entry->size) {
+            fclose(file);
+            return -1;
+        }
+        if (fclose(file)) return -1;
+        written++;
+    }
+    return written;
+}
+
+int ObjectLoader_LoadBuiltin(const char *library, LoadedObject *object, char *error, size_t error_size)
+{
+    const MemoriesBuiltinMod *builtin = BuiltinMods_Find(library);
+    memset(object, 0, sizeof(*object));
+    if (error_size) error[0] = '\0';
+    if (!builtin || !builtin->init) {
+        if (error_size) snprintf(error, error_size, "is not built into this game (code mods are linked in here)");
+        return -1;
+    }
+    if (builtin->register_globals) builtin->register_globals();
+    object->builtin = builtin;
+    object->hash = builtin->hash;
+    return 0;
 }
 #endif

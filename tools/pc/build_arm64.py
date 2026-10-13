@@ -575,8 +575,53 @@ def generate_mod_exports(
     return export_object
 
 
+def link_builtin_mods(build, cc, flags, enabled):
+    """The Switch's code mods, linked in (src/pc/mods/builtin_mods.h): each
+    of mods/* with a library, translated against this build's summary and
+    signatures, and builtin_mods.c, their table. Returns the objects."""
+    import switch_deps
+    from build_mod_arm64 import build_builtin, builtin_files, builtin_table, mod_pins
+
+    mods, files = [], []
+    if enabled:
+        summary = json.loads((build / "summary.json").read_text())
+        aliases = dict(summary["aliases"])
+        aliases.update(
+            dict(
+                line.split()
+                for line in (ROOT / "config/pc/host_symbol_renames.txt").read_text().splitlines()
+                if line.strip()
+            )
+        )
+        aliases.update(rand="Mods_ModRand", srand="Mods_ModSrand")
+        signatures = json.loads((build / "mod_signatures.json").read_text())
+        pins = mod_pins(summary, maps().values())
+        tools = {"ld": switch_deps.ld(), "objcopy": switch_deps.objcopy()}
+        for manifest in sorted((ROOT / "mods").glob("*/mod.json")):
+            if not json.loads(manifest.read_text(encoding="utf-8-sig")).get("library"):
+                continue
+            mods.append(
+                build_builtin(
+                    manifest.parent, build, compiler=cc, host_flags=HOST["flags"],
+                    aliases=aliases, signatures=signatures, pins=pins, tools=tools,
+                )
+            )
+            files += builtin_files(manifest.parent)
+    table = build / "builtin_mods.c"
+    table.write_text(builtin_table(mods, files))
+    table_object = build / "builtin_mods.o"
+    if run_logged(
+        [cc, *flags, "-c", str(table), "-o", str(table_object)],
+        build / "logs/builtin_mods.log",
+    ):
+        raise SystemExit("Mod table compilation failed: " + str(build / "logs/builtin_mods.log"))
+    print(f"Linking {len(mods)} code mod(s) in", flush=True)
+    return [str(table_object), *[str(obj) for _, _, obj, _ in mods]]
+
+
 def link_game(
-    build, jobs, path_for, tables, export_object, cc, sdk, flags, dependencies
+    build, jobs, path_for, tables, export_object, cc, sdk, flags, dependencies,
+    extra_objects=(),
 ):
     """Compile generated tables and link the native executable."""
     generated_tables = build / "tables.c"
@@ -592,6 +637,7 @@ def link_game(
         *[str(path_for("obj", s, ".o")) for s, g in jobs],
         str(tables_obj),
         str(export_object),
+        *extra_objects,
     ]
     if HOST["name"] == "switch":
         import switch_deps
@@ -680,6 +726,12 @@ def main():
     parser.add_argument("--build", type=Path)
     parser.add_argument("--jobs", type=int, default=8)
     parser.add_argument("--compile-only", action="store_true")
+    parser.add_argument(
+        "--builtin-mods",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Switch: link the repository's code mods (mods/*) into the .nro (default)",
+    )
     parser.add_argument(
         "--instrument-softgpu",
         action="store_true",
@@ -862,8 +914,12 @@ def main():
     export_object = generate_mod_exports(
         build, jobs, path_for, raw_text, aliases, linked_defs, pin_maps, cc, flags
     )
+    extra_objects = []
+    if HOST["name"] == "switch":
+        extra_objects = link_builtin_mods(build, cc, flags, args.builtin_mods)
     status = link_game(
-        build, jobs, path_for, tables, export_object, cc, sdk, flags, dependencies
+        build, jobs, path_for, tables, export_object, cc, sdk, flags, dependencies,
+        extra_objects,
     )
 
     if not status:
