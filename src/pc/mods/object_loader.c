@@ -1154,6 +1154,9 @@ invalid:
 }
 #endif
 
+/* The table only where the game links one: a weak reference that stays
+ * undefined does not link on macOS. */
+#ifdef MEMORIES_BUILTIN_CODE_MODS
 const MemoriesBuiltinMod *BuiltinMods_Find(const char *library)
 {
     size_t length;
@@ -1169,7 +1172,6 @@ const MemoriesBuiltinMod *BuiltinMods_Find(const char *library)
     return NULL;
 }
 
-#ifdef MEMORIES_BUILTIN_CODE_MODS
 /* Whether `path` holds exactly `size` bytes of `data`. */
 static int same_file(const char *path, const unsigned char *data, unsigned size)
 {
