@@ -175,7 +175,12 @@ int Switch_EarlyInit(char *why, size_t size)
     if (__nxlink_host.s_addr && R_SUCCEEDED(socketInitializeDefault()) && nxlinkStdio() >= 0) {
         /* stdout and stderr go to the terminal */
     } else {
-        int log = open(PATHS_SWITCH_DIR "/log.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        /* The last run's log stays, as log-previous.txt: a restart (after
+         * the credits, Apply & restart) would otherwise lose how it ended. */
+        int log;
+        remove(PATHS_SWITCH_DIR "/log-previous.txt");
+        rename(PATHS_SWITCH_DIR "/log.txt", PATHS_SWITCH_DIR "/log-previous.txt");
+        log = open(PATHS_SWITCH_DIR "/log.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (log >= 0) {
             dup2(log, STDOUT_FILENO);
             dup2(log, STDERR_FILENO);

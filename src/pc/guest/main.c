@@ -78,12 +78,28 @@ static char **launch_argv;
 /* Homebrew cannot start a process: the loader (hbloader) starts the same
  * .nro again once this one exits, when it was asked to before. The
  * environment does not carry over, so MEMORIES_RESTART_ENV has nothing to
- * change. */
+ * change. The process then ends as VSync ends it on a quit (libetc.c):
+ * the clock and the mods first, since the restart may come from the middle
+ * of a frame (the credits, libgpu.c) with the VBlank thread still running. */
 int Platform_RestartGame(void)
 {
-    if (!launch_argv || !launch_argv[0] || !envHasNextLoad() ||
-        R_FAILED(envSetNextLoad(launch_argv[0], launch_argv[0])))
+    Result result;
+    if (!launch_argv || !launch_argv[0] || !*launch_argv[0]) {
+        fprintf(stderr, "memories-pc: restart: the loader gave no path to this .nro\n");
         return -1;
+    }
+    if (!envHasNextLoad()) {
+        fprintf(stderr, "memories-pc: restart: the loader cannot start a homebrew next\n");
+        return -1;
+    }
+    result = envSetNextLoad(launch_argv[0], launch_argv[0]);
+    if (R_FAILED(result)) {
+        fprintf(stderr, "memories-pc: restart: could not ask for %s next (0x%x)\n", launch_argv[0], result);
+        return -1;
+    }
+    fprintf(stderr, "memories-pc: restart: %s next\n", launch_argv[0]);
+    Platform_StopTimers();
+    Mods_Shutdown();
     exit(0);
 }
 #endif

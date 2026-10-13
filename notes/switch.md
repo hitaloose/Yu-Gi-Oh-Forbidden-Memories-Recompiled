@@ -17,6 +17,7 @@ sdmc:/switch/yfm-redecomp/mods/       one folder per mod
 sdmc:/switch/yfm-redecomp/languages/  the European translations (from the ZIP)
 sdmc:/switch/yfm-redecomp/user/       saves, save states and settings
 sdmc:/switch/yfm-redecomp/log.txt     the last start's log
+sdmc:/switch/yfm-redecomp/log-previous.txt  the one before it
 ```
 
 The `.nro` makes `game/`, `mods/` and `user/` on its first start
@@ -63,7 +64,11 @@ slot** choosing the slot. A state is tied to the exact `.nro` that made it
   Switch's GPU.
 - No update check and no file picker.
 - The log goes to `log.txt` in the game's folder, or to the PC's terminal
-  when started with `nxlink -s`.
+  when started with `nxlink -s`; each start keeps the last one as
+  `log-previous.txt`, so a restart does not lose how the run before it ended.
+- A restart (after the credits, **Apply & restart**) asks the loader to start
+  the same `.nro` again, then ends the way quitting does: the clock and the mods
+  stop first.
 
 ## Building
 
