@@ -178,7 +178,49 @@ writes to `dist/`:
   license, `languages/`, `game/` and the shipped data mods;
 - a `.sha256` beside each.
 
-The `package-switch` job of `.github/workflows/pc-release.yml` does the same
-on a `macos-15` runner, installing devkitPro there, and a `v*` tag's draft
-release carries both files. A manual run can build the Switch alone
-(**Run workflow**, platform `switch`).
+`.github/workflows/switch-release.yml` does the same on a `macos-15` runner,
+installing devkitPro there, on every push to `master` and every pull request;
+a `vX.Y.Z-switch.N` tag's run also drafts a release with these files.
+
+### Fork releases
+
+This repository is a fork of
+[Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled](https://github.com/Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled)
+for the Switch alone. `master` is the upstream plus the Switch port, kept up
+by merges (never a rebase), so a merge only has to resolve what changed
+since the last one.
+
+- **Tags**: `vX.Y.Z-switch.N`, the upstream release `vX.Y.Z` and the Switch
+  build of it, `.1` first. Each is a full release, not a pre-release.
+- **Upstream releases**: `.github/workflows/switch-sync-upstream.yml` looks
+  at the upstream's latest stable release every six hours (its
+  pre-releases are left alone; a manual run can name a tag). One with no
+  `-switch.*` tag here is merged into `master`, then `vX.Y.Z-switch.1` is
+  tagged and pushed, and `switch-release.yml` drafts its release. Try the
+  draft on a Switch, then publish it.
+- **A conflicting merge** is undone and opens an issue listing the files.
+  Merge by hand:
+
+  ```sh
+  git fetch origin tag vX.Y.Z        # origin: the upstream
+  git switch master && git merge vX.Y.Z
+  # resolve, build for the Switch, commit
+  git push fork master
+  git tag -a vX.Y.Z-switch.1 -m "vX.Y.Z-switch.1" && git push fork vX.Y.Z-switch.1
+  ```
+
+  `README.md` keeps this fork's text on a merge (`merge=ours` in
+  `.gitattributes`) once `git config merge.ours.driver true` is set in the
+  clone, as the workflow does.
+- **Fixes of the Switch port alone**: commit on `master`, then tag the next
+  `N` (`v0.3.0-switch.2`) and push the tag.
+- **The upstream's workflows** stay in the tree, so their changes merge
+  cleanly, but are disabled on this repository (`gh workflow disable`):
+  `matching-build.yml`, `overlay-build.yml`, `metadata.yml`, `pc-build.yml`
+  and `pc-release.yml`. One the upstream adds is disabled by the sync job
+  after its push.
+- **`SYNC_TOKEN`**: the sync job pushes with a fine-grained token for this
+  repository alone (Contents, Workflows, Actions and Issues: read and
+  write), kept in that repository secret. The workflow's own token cannot
+  push a merge that touches `.github/workflows/`, and its pushes start no
+  other workflow, so its tag would draft no release.

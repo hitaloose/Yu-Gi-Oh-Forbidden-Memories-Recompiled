@@ -5,3 +5,6 @@
 languages/*.txt text eol=lf
 # The packs dealer's golden deals, compared byte for byte (tests/pc/packs_test.c).
 tests/pc/packs_golden.txt text eol=lf
+# This fork's README is its own: a merge from the upstream keeps it
+# (switch-sync-upstream.yml sets the driver: git config merge.ours.driver true).
+README.md merge=ours

@@ -1,0 +1,128 @@
+name: Switch release
+
+# This fork's own build (notes/switch.md, "Fork releases"). Every push to
+# master and every pull request builds the homebrew as a check; a
+# vX.Y.Z-switch.N tag (pushed by hand, or by switch-sync-upstream.yml after an
+# upstream release) also makes a draft release with the .nro and the ZIP, to
+# test on a Switch and publish. The upstream's workflows stay in the tree, so
+# its changes merge cleanly, but are disabled on this repository.
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*-switch.*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: An existing vX.Y.Z-switch.N tag to build and draft a release for (empty builds only)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: switch-release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && !inputs.tag }}
+
+jobs:
+  # tools/pc/package_switch.py: the .nro on its own, and a ZIP to unpack onto
+  # the SD card's root. Built on macOS, where the pinned LLVM and the guest IR
+  # pass come from, with devkitPro's devkitA64, libnx and portlibs for linking.
+  build:
+    name: package (switch, macos-15)
+    runs-on: macos-15
+    timeout-minutes: 90
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Release tag
+        id: version
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          tag="$INPUT_TAG"
+          if [ -z "$tag" ] && [ "$REF_TYPE" = tag ]; then tag="$REF_NAME"; fi
+          if [ -n "$tag" ] && ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-switch\.[0-9]+$ ]]; then
+            echo "::error::$tag is not a vX.Y.Z-switch.N tag"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "PACKAGE_VERSION=${tag:-dev-${GITHUB_SHA:0:12}}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.version.outputs.tag && format('refs/tags/{0}', steps.version.outputs.tag) || '' }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            tmp/pc/llvm-macos
+            tmp/pc/tools/macos
+            tmp/pc/macos-deps
+          key: macos-arm64-llvm21.1.8-${{ hashFiles('tools/pc/macos_toolchain.json', 'tools/pc/macos_deps.py', 'tools/pc/dependency_archives.py', 'tools/pc/fetch_tools.py') }}
+      - name: devkitPro (devkitA64, libnx, Switch portlibs)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/devkitpro-pacman.pkg" https://github.com/devkitPro/pacman/releases/latest/download/devkitpro-pacman-installer.pkg
+          sudo installer -pkg "$RUNNER_TEMP/devkitpro-pacman.pkg" -target /
+          sudo /opt/devkitpro/pacman/bin/pacman -Sy --noconfirm --needed switch-dev switch-sdl2 switch-mesa switch-freetype switch-libpng switch-zlib switch-harfbuzz
+          command -v pkg-config || brew install pkgconf
+          echo "DEVKITPRO=/opt/devkitpro" >> "$GITHUB_ENV"
+      - name: Build the Switch homebrew without a disc
+        run: MEMORIES_VERSION="$PACKAGE_VERSION" python tools/pc/build.py --target switch
+      - name: Package the .nro and the SD card archive
+        run: python tools/pc/package_switch.py --version "$PACKAGE_VERSION"
+      - name: Upload the Switch homebrew
+        uses: actions/upload-artifact@v4
+        with:
+          name: yfm-redecomp-switch
+          path: |
+            dist/yfm-redecomp-*-switch.nro
+            dist/yfm-redecomp-*-switch.zip
+            dist/yfm-redecomp-*-switch.*.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  # A draft, never a published release: it goes out once it has been tried on
+  # a Switch. A full release, not a pre-release, whatever the tag's hyphen.
+  release:
+    needs: build
+    if: needs.build.outputs.tag != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: yfm-redecomp-switch
+          path: release
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          UPSTREAM: Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled
+        run: |
+          base="${RELEASE_TAG%-switch.*}"
+          cat > notes.md <<EOF
+          Nintendo Switch homebrew, based on the upstream release [$base](https://github.com/$UPSTREAM/releases/tag/$base) (its changes are listed there).
+
+          **Install:** unpack \`yfm-redecomp-$RELEASE_TAG-switch.zip\` onto the SD card's root (or copy the \`.nro\` alone into \`sdmc:/switch/\`), put your USA disc's \`.bin\` in \`sdmc:/switch/yfm-redecomp/game/\` and start the homebrew **in place of a game** (hold **R** while starting any game). See the [README](https://github.com/$GH_REPO#readme).
+
+          EOF
+          if gh release view "$RELEASE_TAG" --json isDraft > release-state.json; then
+            python3 -c 'import json; assert json.load(open("release-state.json"))["isDraft"], "Refusing to replace a published release"'
+            gh release edit "$RELEASE_TAG" --prerelease=false
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --prerelease=false \
+              --title "$RELEASE_TAG" --notes-file notes.md --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" release/* --clobber
