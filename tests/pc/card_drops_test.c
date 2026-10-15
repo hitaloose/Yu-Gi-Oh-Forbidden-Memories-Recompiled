@@ -263,6 +263,31 @@ static void mod_lock(void)
     Tables_Clear();
 }
 
+/* "limits": {"starchip_multiplier": n} locks Game > Starchip multiplier the
+ * same way, apart from "card_drops" (starchip_prize.h). */
+static void starchip_lock(void)
+{
+    const char *by = "x";
+    Tables_Clear();
+    notes[0] = '\0';
+    CHECK(Tables_StarchipMultiplierLock(&by) == 0 && by == NULL);
+    apply("three", "{\"limits\": {\"starchip_multiplier\": 3}}");
+    CHECK(Tables_StarchipMultiplierLock(&by) == 3 && !strcmp(by, "three"));
+    CHECK(Tables_CardDropsLock(&by) == 0 && by == NULL);
+    apply("drops", FIVE);
+    CHECK(Tables_StarchipMultiplierLock(&by) == 3 && !strcmp(by, "three"));
+    CHECK(Tables_CardDropsLock(&by) == 5 && !strcmp(by, "drops") && !notes[0]);
+    apply("ten", "{\"limits\": {\"starchip_multiplier\": 10}}");
+    CHECK(Tables_StarchipMultiplierLock(&by) == 10 && !strcmp(by, "ten"));
+    CHECK(!strcmp(notes, "three: limits: \"starchip_multiplier\" 3 is not used: ten, applied later, locks it at 10\n"));
+    notes[0] = '\0';
+    apply("bad", "{\"limits\": {\"starchip_multiplier\": 100}}");
+    CHECK(!strcmp(notes, "bad: limits: \"starchip_multiplier\" is at most 99; left out\n"));
+    CHECK(Tables_StarchipMultiplierLock(NULL) == 10);
+    Tables_Clear();
+    CHECK(Tables_StarchipMultiplierLock(&by) == 0 && by == NULL);
+}
+
 /* In a tower's duel its "drops" wins over Game > Card drops: 99 asked, one card. */
 static void tower(void)
 {
@@ -286,6 +311,7 @@ int main(void)
     tower();
     same_as_the_game();
     mod_lock();
+    starchip_lock();
     puts("card drops: rolls and a mod's lock passed");
     return 0;
 }

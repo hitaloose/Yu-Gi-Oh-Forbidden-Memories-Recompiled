@@ -68,6 +68,14 @@ int main(void)
     /* A retired id keeps its number for code mods (settings.h), but has no
      * key: its old line is carried through as any other unknown one. */
     assert(SET_HD_TEXT == 32 && SET_CARD_DROPS == 38 && Settings_Key(SET_HD_HUD) == NULL);
+    /* Game > Starchip multiplier: 1 (the console's) to 99, after every id
+     * an earlier release had. */
+    assert(SET_STARCHIP_MULTIPLIER > SET_SCREEN_ROTATION && !strcmp(Settings_Key(SET_STARCHIP_MULTIPLIER), "starchip_multiplier"));
+    assert(Settings_Min(SET_STARCHIP_MULTIPLIER) == 1 && Settings_Max(SET_STARCHIP_MULTIPLIER) == 99);
+    Settings_Set(SET_STARCHIP_MULTIPLIER, 500);
+    assert(Settings_Get(SET_STARCHIP_MULTIPLIER) == 99);
+    Settings_Set(SET_STARCHIP_MULTIPLIER, 10);
+    assert(Settings_Save() && contains(path, "starchip_multiplier=10\n"));
     Settings_Set(SET_HD_HUD, 1);
     assert(Settings_Get(SET_HD_HUD) == 0 && Settings_GetNamed("hd_hud", -1) == 1);
     assert(contains(path, "hd_hud=1\n"));

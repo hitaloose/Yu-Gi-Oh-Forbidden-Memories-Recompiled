@@ -207,7 +207,12 @@ long Tables_Limit(const char *name);
  *   TABLES_VALUE_CARD_DROPS      the cards every won duel deals, 1 to
  *                                CARD_DROPS_MAX, over the player's Game >
  *                                Card drops (0: no mod says; the player's
- *                                choice, drops.h CardDrops_Count) */
+ *                                choice, drops.h CardDrops_Count)
+ *   TABLES_VALUE_STARCHIP_MULTIPLIER  what every won duel's starchips are
+ *                                multiplied by, 1 to
+ *                                TABLES_VALUE_STARCHIP_MULTIPLIER_MAX, over
+ *                                the player's Game > Starchip multiplier (0:
+ *                                no mod says; starchip_prize.h) */
 enum {
     TABLES_VALUE_DECK_COPIES,
     TABLES_VALUE_SWORDS_TURNS,
@@ -220,17 +225,23 @@ enum {
     TABLES_VALUE_PRIZE,
     TABLES_VALUE_NEW_GAME_STARCHIPS = TABLES_VALUE_PRIZE + 5,
     TABLES_VALUE_CARD_DROPS,
+    TABLES_VALUE_STARCHIP_MULTIPLIER,
     TABLES_VALUE_COUNT
 };
 /* The most the game shows or keeps for some of them. */
 #define TABLES_VALUE_SWORDS_MAX 9      /* one digit on the field's card bar */
 #define TABLES_VALUE_PRIZE_MAX 1000    /* past the row's eight pictures, one and "xN" (starchip_prize.h) */
 #define TABLES_VALUE_CARD_DROPS_MAX 99 /* Game > Card drops' range (drops.h CARD_DROPS_MAX) */
+#define TABLES_VALUE_STARCHIP_MULTIPLIER_MAX 99 /* Game > Starchip multiplier's range */
 long Tables_Value(int which, long retail);
 /* The cards a mod's "limits" "card_drops" locks every won duel to, 1 to
  * CARD_DROPS_MAX, with the id of the mod that says in *mod (the latest one,
  * when several do); 0, and NULL in *mod, when none does. */
 int Tables_CardDropsLock(const char **mod);
+/* The same for "limits" "starchip_multiplier": what every won duel's
+ * starchips are multiplied by, 1 to TABLES_VALUE_STARCHIP_MULTIPLIER_MAX,
+ * over the player's Game > Starchip multiplier; 0 when no mod says. */
+int Tables_StarchipMultiplierLock(const char **mod);
 /* What a duel's end adds to the winner's rank score: `tag` is the side's
  * result_adjustment, 40 (DUEL_RANK_ADJUST_EXODIA_WIN) and -40
  * (DUEL_RANK_ADJUST_DECK_OUT_WIN) the mod's "exodia" and "deck_out" when it

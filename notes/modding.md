@@ -68,7 +68,7 @@ editors write, is fine):
 | `equip_bonus_default` | what an equip adds when no `equips` entry sets its bonus, below |
 | `trap_thresholds` | the attack each of the six attack traps stops, below |
 | `passwords` | each card's password and starchip price on the Password screen, below |
-| `limits` | the numbers the game caps (ATK and DEF, life points, starchips, the chest, the records) and the cards a won duel deals (`card_drops`), below |
+| `limits` | the numbers the game caps (ATK and DEF, life points, starchips, the chest, the records) the cards a won duel deals (`card_drops`) and the starchip multiplier (`starchip_multiplier`), below |
 | `guardian_stars` | the stars' names and icons, stars 11 to 15, and what each star gets against each other, below |
 | `attributes` | the six retail attribute names, and new monster attributes from the port's attribute bank, below |
 | `card_text_colors` | the color a card's name, description and guardian star are written in on its details, below |
@@ -120,6 +120,7 @@ checked as well, when it starts.
 | 14 | the release after v0.3.0 | `tower`; a duelist's `tower_only`, or `unlock` `tower`; a menu item's action `tower` ([Tower mode](tower-mode.md)) |
 | 15 | the release after v0.3.0 | `card_types`: renamed retail types, new monster types and their per-type icons |
 | 16 | the release after v0.3.0 | mod-defined card attributes (`attributes`) |
+| 17 | the release after v0.3.0 | the `limits` `starchip_multiplier`, a lock on what a won duel's starchips are multiplied by ([gameplay tables](gameplay-tables.md)) |
 
 The FM Editor writes `min_api` on save as the lowest one of these that has
 everything the mod uses, never lowering one written higher, and its Mod

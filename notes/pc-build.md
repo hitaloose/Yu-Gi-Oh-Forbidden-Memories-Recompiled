@@ -811,7 +811,7 @@ move, Enter activates, Esc closes (with no menu open it is Exit game, asking fir
 | Audio | Master/music/SFX sliders, mute and focus-loss mute, Gaussian (console) or cubic (sharper) voice interpolation (`audio_interpolation`) |
 | Video | Window scale and Menu size submenus, window mode, scaling/aspect/filter/VSync choices |
 | View | Fusion helper (`fusion_helper`, [notes/fusion-helper.md](fusion-helper.md)), Card passwords, Library: show every card, Free Duel progress (see [View > Free Duel progress](#view--free-duel-progress)); Duel rank submenu: Off, Rank, Rank and score (`rank_meter` 0/1/2, see [Duel rank](#duel-rank)); Opponent's name for COM; Japanese buttons |
-| Game | Game speed, Frame rate and Cheats submenus (see [Cheats](#cheats)), Card drops, Deck slots, card browsing, Restart game |
+| Game | Game speed, Frame rate and Cheats submenus (see [Cheats](#cheats)), Card drops, Starchip multiplier (`starchip_multiplier`, [gameplay tables](gameplay-tables.md)), Deck slots, card browsing, Restart game |
 | Mods | opens the mods window, which lists every mod found in `mods/` beside the executable and in the user directory (`notes/modding.md`) |
 | Debug | HUD levels, pause/step, frame and VRAM dumps |
 | Trace | Live frames, disc, SPU, input and state log-channel switches |

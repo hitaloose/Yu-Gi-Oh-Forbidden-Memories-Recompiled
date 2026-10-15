@@ -106,9 +106,10 @@ class ValuesTest(unittest.TestCase):
                      "DUEL_CRUSH_CARD_ATTACK_THRESHOLD": 1500, "TABLES_LIMIT_STAT_MAX": 32767, "CARD_STAT_MAX": 9999,
                      "DUEL_RANK_SCORE_INITIAL": 50, "DUEL_RANK_ADJUST_EXODIA_WIN": 40,
                      "DUEL_RANK_ADJUST_DECK_OUT_WIN": -40, "TABLES_VALUE_PRIZE_MAX": 1000,
-                     "TABLES_LIMIT_STARCHIPS_MAX": 99999999, "TABLES_VALUE_CARD_DROPS_MAX": 99}
+                     "TABLES_LIMIT_STARCHIPS_MAX": 99999999, "TABLES_VALUE_CARD_DROPS_MAX": 99,
+                     "TABLES_VALUE_STARCHIP_MULTIPLIER_MAX": 99}
         rows = re.findall(r'\{"([\w.]+)", ([-\w]+), ([-\w]+), ([-\w]+), (NULL|")', table)
-        self.assertEqual(len(rows), 15)
+        self.assertEqual(len(rows), 16)
         for key, retail, low, high, storage in rows:
             number = lambda text: constants[text] if text in constants else int(text)
             field = values.FIELD[key]

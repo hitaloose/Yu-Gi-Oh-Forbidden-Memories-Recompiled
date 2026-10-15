@@ -5,10 +5,27 @@
  * font's letters, which HD text can set) and 0x0A the color. */
 #include "starchip_prize.h"
 #include "pc/text/glyphs.h"
+#include "pc/cards/tables.h"
+#include "pc/platform/settings.h"
 #include "game/duel_result_display.h"
 #include <stdio.h>
 
 enum { WHITE = 0x00 };
+
+int StarchipPrize_Multiplier(void)
+{
+    int multiplier = Tables_StarchipMultiplierLock(NULL);
+    if (!multiplier) multiplier = Settings_Get(SET_STARCHIP_MULTIPLIER);
+    if (multiplier < 1) return 1;
+    return multiplier > TABLES_VALUE_STARCHIP_MULTIPLIER_MAX ? TABLES_VALUE_STARCHIP_MULTIPLIER_MAX : multiplier;
+}
+
+int StarchipPrize_Multiply(int prize, int multiplier)
+{
+    long total = (long)prize * multiplier;
+    if (total < 0) return 0;
+    return total > TABLES_VALUE_PRIZE_MAX ? TABLES_VALUE_PRIZE_MAX : (int)total;
+}
 
 int StarchipPrize_Pictures(int prize)
 {

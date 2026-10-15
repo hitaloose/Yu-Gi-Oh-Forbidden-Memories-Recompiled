@@ -131,10 +131,12 @@ void DuelScene_UpdateResultRewards(void)
                 goto side_result;
 #ifdef MEMORIES_PC
             /* One for D to five for S, or a mod's "starchip_prize"
-               (tables.h), up to 1000: past the eight pictures the row
-               holds, one with its count beside it (starchip_prize.h). */
-            D_8009B1E8->starchip_prize = (u16)Tables_Value(TABLES_VALUE_PRIZE + D_8009B1E8->rank_tier,
-                                                           D_8009B1E8->rank_tier + 1);
+               (tables.h), times Game > Starchip multiplier, up to 1000:
+               past the eight pictures the row holds, one with its count
+               beside it (starchip_prize.h). */
+            D_8009B1E8->starchip_prize = (u16)StarchipPrize_Multiply(
+                (int)Tables_Value(TABLES_VALUE_PRIZE + D_8009B1E8->rank_tier, D_8009B1E8->rank_tier + 1),
+                StarchipPrize_Multiplier());
 #else
             D_8009B1E8->starchip_prize = D_8009B1E8->rank_tier + 1;
 #endif

@@ -41,6 +41,7 @@ PRIZE_MAX = 1000            # a win's starchips; past PRIZE_ROW the results show
 PRIZE_ROW = 8               # the starchip pictures the results' row draws
 EFFECT_MAX = 9999           # four digits in the effect's number
 CARD_DROPS_MAX = 99         # Game > Card drops' range (src/pc/cards/drops.h)
+STARCHIP_MULTIPLIER_MAX = 99  # Game > Starchip multiplier's range (src/pc/cards/tables.h)
 
 STAT = "a 16-bit number in every card record"
 PRIZE_STORAGE = "the starchips a win gives"
@@ -84,6 +85,8 @@ GROUPS = (
          "eight digits on screen"),
         ("starchips", "Most starchips", 999999, 0, STARCHIPS_MAX, "The save holds", "eight digits on screen"),
         ("card_drops", "Cards a win deals", 0, 1, CARD_DROPS_MAX, "Locks Game > Card drops", None),
+        ("starchip_multiplier", "Starchip multiplier", 0, 1, STARCHIP_MULTIPLIER_MAX,
+         "Locks Game > Starchip multiplier", None),
     )),
     ("Rank", (
         ("rank_score.start", "Score at the start", 50, 0, 99, "Below 50 is TEC", None),

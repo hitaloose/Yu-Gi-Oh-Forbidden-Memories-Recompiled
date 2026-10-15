@@ -34,6 +34,9 @@ static const SettingInfo info[SET_COUNT] = {
      * 4 Italian, 5 Spanish, from the player's PAL disc; at the next launch. */
     [SET_LANGUAGE] = {"language", NULL, "MEMORIES_LANGUAGE", NULL, 0, 0, 5},
     [SET_CARD_DROPS] = {"card_drops", NULL, "MEMORIES_CARD_DROPS", NULL, 1, 1, 99},
+    /* Game > Starchip multiplier: the starchips a won duel gives, times this;
+     * 1 is the console's (src/pc/cards/starchip_prize.h). */
+    [SET_STARCHIP_MULTIPLIER] = {"starchip_multiplier", NULL, "MEMORIES_STARCHIP_MULTIPLIER", NULL, 1, 1, 99},
     /* 1: the Library lays out every card never seen as a seen one, while it
      * is open; nothing is given or saved (Cards_LibraryPlaceholder, cards.h). */
     [SET_LIBRARY_ALL_CARDS] = {"library_all_cards", NULL, "MEMORIES_LIBRARY_ALL_CARDS", NULL, 0, 0, 1},

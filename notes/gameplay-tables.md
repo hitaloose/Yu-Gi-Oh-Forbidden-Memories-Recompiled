@@ -510,7 +510,8 @@ no mod sets it, so without one nothing changes:
     "rank_score": {"start": 50, "exodia": 40, "deck_out": -40},
     "starchip_prize": {"S": 8, "A": 6, "B": 4, "C": 2, "D": 1},
     "new_game_starchips": 500,
-    "card_drops": 5
+    "card_drops": 5,
+    "starchip_multiplier": 2
 }
 ```
 
@@ -527,6 +528,7 @@ no mod sets it, so without one nothing changes:
 | `starchip_prize` `S` to `D` | the starchips a win against the CPU gives at that rank, POW or TEC; the results show a starchip each, or past 8 one starchip with "xN" beside it | 5, 4, 3, 2, 1 | 0-1000 |
 | `new_game_starchips` | the starchips a new game's save starts with (at most the `starchips` cap) | 0 | 0-99999999 |
 | `card_drops` | the cards every won duel deals, locked: the player's Game > Card drops shows this number, greyed and named after the mod, and comes back as it was when the mod is removed ([card drops](card-drops.md#a-mod-that-sets-it); `min_api` 13) | the player's (1 on the console) | 1-99 |
+| `starchip_multiplier` | what every won duel's starchips (`starchip_prize`, the disc's or the mod's) are multiplied by, locked: the player's Game > Starchip multiplier shows this number, greyed and named after the mod, and comes back as it was when the mod is removed (`min_api` 17) | the player's (1 on the console) | 1-99 |
 
 **What holds them back.** Build Deck counts a card's copies up to the forty
 a deck holds. The field's card bar shows the Swords' turns as one digit.
@@ -543,7 +545,15 @@ after it as one halfword on the PC, and is added to the save's starchips up
 to the `starchips` cap (999999, or the mod's). A value past its
 range is noted in the Mods window and held at the most the game shows; a
 rank value past its range means nothing and is left out with a note, and so
-is a `card_drops` past 1 to 99 (Game > Card drops' own range).
+is a `card_drops` past 1 to 99 (Game > Card drops' own range), and a
+`starchip_multiplier` past 1 to 99 (Game > Starchip multiplier's). The
+multiplied prize is worked out as the results screen opens, into the
+record, and is held at 1000, the most the row shows.
+
+**Game > Starchip multiplier** (`starchip_multiplier` in `settings.txt`,
+`MEMORIES_STARCHIP_MULTIPLIER`) is the player's own 1 to 99, beside Card
+drops: a win against the CPU gives its prize times it, up to 1000 (an S
+at 10x gives 50, shown as one starchip and "x50"). 1 is the console's.
 
 The rank's end tags stay the disc's (40 for Exodia and -40 for an empty
 deck in `DuelSideState.rank.result_adjustment`): the duel's end and the

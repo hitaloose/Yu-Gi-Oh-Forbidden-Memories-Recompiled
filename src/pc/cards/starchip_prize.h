@@ -15,6 +15,11 @@
  * The string is composed from the results record itself (D_8009B1E8)
  * whenever the box asks for it, so a state saved on the results screen
  * shows the same. */
+/* Game > Starchip multiplier (SET_STARCHIP_MULTIPLIER, or a mod's "limits"
+ * "starchip_multiplier", which locks it): the prize, the disc's or a mod's
+ * "starchip_prize", times 1 to 99, up to the 1000 the row can show. It is
+ * worked out once, as the results screen opens, into the results record,
+ * so the row, the award and a saved state all have the same number. */
 #include "types.h"
 
 #define STARCHIP_PRIZE_ROW 8            /* the pictures the disc's row draws */
@@ -33,6 +38,11 @@
 #define STARCHIP_PRIZE_BOX_HEIGHT 0x10
 #define STARCHIP_PRIZE_TEXT_SIZE 32
 
+/* What a win's starchips are multiplied by: the mod's lock, else the
+ * player's Game > Starchip multiplier. */
+int StarchipPrize_Multiplier(void);
+/* `prize` times `multiplier`, at most TABLES_VALUE_PRIZE_MAX. */
+int StarchipPrize_Multiply(int prize, int multiplier);
 /* How many pictures the row draws for `prize`: the prize itself up to
  * eight, else one. */
 int StarchipPrize_Pictures(int prize);

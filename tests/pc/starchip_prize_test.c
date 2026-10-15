@@ -15,6 +15,15 @@
 
 DuelResultDisplayState *G32 D_8009B1E8;
 
+/* Game > Starchip multiplier and a mod's lock on it. */
+static int player_multiplier = 1, mod_multiplier;
+int Settings_Get(SettingId id) { return id == SET_STARCHIP_MULTIPLIER ? player_multiplier : 0; }
+int Tables_StarchipMultiplierLock(const char **mod)
+{
+    if (mod) *mod = mod_multiplier ? "lock" : NULL;
+    return mod_multiplier;
+}
+
 /* The game's letters as ASCII, but for one that needs the extended form. */
 int Glyphs_Code(uint32_t character) { return character == 'x' ? 0x1F1 : (int)character; }
 
@@ -50,6 +59,23 @@ int main(void)
           *((unsigned char *)&record + 0x3B) == (1000 >> 8));
     CHECK(!memcmp(StarchipPrize_Text(STARCHIP_PRIZE_TEXT_ID), x1000, sizeof(x1000)));
     CHECK(StarchipPrize_Text(STARCHIP_PRIZE_TEXT_ID - 1) == NULL && StarchipPrize_Text(0x44) == NULL);
+
+    /* The multiplier: the player's, a mod's lock over it, in range. */
+    CHECK(StarchipPrize_Multiplier() == 1);
+    player_multiplier = 10;
+    CHECK(StarchipPrize_Multiplier() == 10);
+    mod_multiplier = 3;
+    CHECK(StarchipPrize_Multiplier() == 3);
+    mod_multiplier = 0;
+    player_multiplier = 0;
+    CHECK(StarchipPrize_Multiplier() == 1);
+    player_multiplier = 500;
+    CHECK(StarchipPrize_Multiplier() == TABLES_VALUE_STARCHIP_MULTIPLIER_MAX);
+    /* The prize times it, up to what the row can show. */
+    CHECK(StarchipPrize_Multiply(5, 1) == 5 && StarchipPrize_Multiply(5, 10) == 50);
+    CHECK(StarchipPrize_Multiply(0, 99) == 0 && StarchipPrize_Multiply(5, 99) == 495);
+    CHECK(StarchipPrize_Multiply(20, 99) == TABLES_VALUE_PRIZE_MAX);
+    CHECK(StarchipPrize_Multiply(1000, 99) == TABLES_VALUE_PRIZE_MAX);
     puts("starchip_prize: ok");
     return 0;
 }

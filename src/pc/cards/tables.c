@@ -1883,12 +1883,14 @@ static void read_life_points(const char *mod, const JsonValue *value)
  *     "rank_score": {"start": n, "exodia": n, "deck_out": n},
  *     "starchip_prize": {"S": n, "A": n, "B": n, "C": n, "D": n},
  *     "new_game_starchips": n,
- *     "card_drops": n
+ *     "card_drops": n, "starchip_multiplier": n
  *
  * Each key's latest mod wins. A section is the key, a "." and the member.
  * "card_drops" locks the cards a won duel deals over the player's Game >
- * Card drops (drops.c); its retail 0 is "no mod says", and a later mod's
- * other number is noted beside the earlier mod, which no longer decides. */
+ * Card drops (drops.c), and "starchip_multiplier" what a win's starchips
+ * are multiplied by over Game > Starchip multiplier (starchip_prize.c).
+ * Their retail 0 is "no mod says", and a later mod's other number is noted
+ * beside the earlier mod, which no longer decides. */
 
 static const struct {
     const char *key;
@@ -1910,10 +1912,14 @@ static const struct {
     {"starchip_prize.S", 5, 0, TABLES_VALUE_PRIZE_MAX, "a win gives"},
     {"new_game_starchips", 0, 0, TABLES_LIMIT_STARCHIPS_MAX, "the game shows (eight digits)"},
     {"card_drops", 0, 1, TABLES_VALUE_CARD_DROPS_MAX, NULL},
+    {"starchip_multiplier", 0, 1, TABLES_VALUE_STARCHIP_MULTIPLIER_MAX, NULL},
 };
 static long value_set[TABLES_VALUE_COUNT];
 static unsigned char value_given[TABLES_VALUE_COUNT];
-static char card_drops_by[64];      /* the mod whose "card_drops" decides */
+/* The mod whose lock decides, for the values that lock a player's setting
+ * ("card_drops", "starchip_multiplier"). */
+static char lock_by[TABLES_VALUE_COUNT][64];
+#define VALUE_LOCKS(i) ((i) == TABLES_VALUE_CARD_DROPS || (i) == TABLES_VALUE_STARCHIP_MULTIPLIER)
 
 static void read_values(const char *mod, const JsonValue *limits)
 {
@@ -1960,14 +1966,13 @@ static void read_values(const char *mod, const JsonValue *limits)
         }
         if (limit_number(mod, where, value, value_keys[i].low, value_keys[i].high,
                          value_keys[i].storage ? value_keys[i].storage : "", &n)) {
-            if (i == TABLES_VALUE_CARD_DROPS) {
-                /* Two mods that lock the drops differently: the one applied
-                 * later decides, and the earlier one says so in the Mods
-                 * window. */
-                if (value_given[i] && value_set[i] != n && strcmp(card_drops_by, mod))
-                    Mods_Note(card_drops_by, "limits: \"card_drops\" %ld is not used: %s, applied later, "
-                              "locks it at %ld", value_set[i], mod, n);
-                snprintf(card_drops_by, sizeof(card_drops_by), "%s", mod);
+            if (VALUE_LOCKS(i)) {
+                /* Two mods that lock it differently: the one applied later
+                 * decides, and the earlier one says so in the Mods window. */
+                if (value_given[i] && value_set[i] != n && strcmp(lock_by[i], mod))
+                    Mods_Note(lock_by[i], "limits: \"%s\" %ld is not used: %s, applied later, "
+                              "locks it at %ld", key, value_set[i], mod, n);
+                snprintf(lock_by[i], sizeof(lock_by[i]), "%s", mod);
             }
             value_set[i] = n;
             value_given[i] = 1;
@@ -1975,11 +1980,21 @@ static void read_values(const char *mod, const JsonValue *limits)
     }
 }
 
+static int value_lock(int which, const char **mod)
+{
+    int locked = value_given[which] ? (int)value_set[which] : 0;
+    if (mod) *mod = locked ? lock_by[which] : NULL;
+    return locked;
+}
+
 int Tables_CardDropsLock(const char **mod)
 {
-    int locked = value_given[TABLES_VALUE_CARD_DROPS] ? (int)value_set[TABLES_VALUE_CARD_DROPS] : 0;
-    if (mod) *mod = locked ? card_drops_by : NULL;
-    return locked;
+    return value_lock(TABLES_VALUE_CARD_DROPS, mod);
+}
+
+int Tables_StarchipMultiplierLock(const char **mod)
+{
+    return value_lock(TABLES_VALUE_STARCHIP_MULTIPLIER, mod);
 }
 
 long Tables_Value(int which, long retail)
@@ -2019,14 +2034,16 @@ static void read_limits(const char *mod, const JsonValue *limits)
         static const char *const keys[] = {"stats", "attack", "defense", "life_points", "two_player", "starchips",
                                             "chest", "free_duel_record", "two_player_record", "deck_copies",
                                             "swords_turns", "crush_card", "spellbinding_circle", "shadow_spell",
-                                            "rank_score", "starchip_prize", "new_game_starchips", "card_drops"};
+                                            "rank_score", "starchip_prize", "new_game_starchips", "card_drops",
+                                            "starchip_multiplier"};
         const char *name = Json_Name(Json_At(limits, i));
         size_t k;
         for (k = 0; k < sizeof(keys) / sizeof(keys[0]) && strcmp(name, keys[k]); k++) {}
         if (k == sizeof(keys) / sizeof(keys[0]))
             Mods_Note(mod, "limits: no limit \"%s\" (stats, attack, defense, life_points, two_player, starchips, chest, "
                       "free_duel_record, two_player_record, deck_copies, swords_turns, crush_card, "
-                      "spellbinding_circle, shadow_spell, rank_score, starchip_prize, new_game_starchips, card_drops)",
+                      "spellbinding_circle, shadow_spell, rank_score, starchip_prize, new_game_starchips, card_drops, "
+                      "starchip_multiplier)",
                       name);
     }
 #define STAT_STORAGE "the game keeps (a 16-bit number; more would mean widening every card record)"
@@ -2457,7 +2474,7 @@ void Tables_Clear(void)
     limit_life_max = limit_record = limit_two_player_record = duelist_life_count = 0;
     limit_starchips = -1;
     memset(value_given, 0, sizeof(value_given));
-    card_drops_by[0] = '\0';
+    memset(lock_by, 0, sizeof(lock_by));
     memset(terrain_bonus, 0, sizeof(terrain_bonus));
     memset(terrain_listed, 0, sizeof(terrain_listed));
     memset(trap_listed, 0, sizeof(trap_listed));

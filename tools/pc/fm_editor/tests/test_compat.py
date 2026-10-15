@@ -168,6 +168,15 @@ class FeatureTest(unittest.TestCase):
     def test_api_16_attributes(self):
         self.assertEqual(self.needs({"attributes": {"attributes": [{"id": 8, "name": "Metal"}]}}), 16)
 
+    def test_api_17_starchip_multiplier(self):
+        """A mod's lock on the starchip multiplier: a game of API 16 or
+        older would leave it out and multiply by the player's own."""
+        self.assertEqual(self.needs({"limits": {"starchip_multiplier": 3}}), 17)
+        api, reasons = compat.required({"limits": {"starchip_multiplier": 3, "card_drops": 5, "attack": 9999}})
+        self.assertEqual(api, 17)
+        self.assertTrue(any("starchip_multiplier" in reason for reason in reasons))
+        self.assertFalse(any("the values" in reason for reason in reasons))
+
     def test_monster_effect_filter_on_a_custom_type(self):
         # monster_effects.c filter(): a declared monster type filters, 255
         # (the filter's "any" byte) and an undeclared id do not.

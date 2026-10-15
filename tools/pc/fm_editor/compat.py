@@ -19,7 +19,7 @@ from pathlib import Path
 from .gamedata import FRAME_COLOR_NAMES, TYPE_MAGIC
 from .model import type_named
 
-HOST_API = 16
+HOST_API = 17
 
 # The release each mod API first shipped in, for the hints. An API past the
 # last listed is newer than every release.
@@ -30,6 +30,8 @@ OLD_LIMITS = ("stats", "attack", "defense", "life_points", "two_player", "starch
               "two_player_record")
 # The values a game of API 12 and older leaves out.
 API_13_LIMITS = ("card_drops",)
+# ... and of API 16 and older.
+API_17_LIMITS = ("starchip_multiplier",)
 
 
 def release_text(api: int) -> str:
@@ -197,7 +199,8 @@ def features(manifest: dict, project=None) -> list:
             add(11, "a ritual of other than three tributes")
     limits = manifest.get("limits")
     if isinstance(limits, dict):
-        newer = sorted(key for key in limits if key not in OLD_LIMITS and key not in API_13_LIMITS)
+        newer = sorted(key for key in limits if key not in OLD_LIMITS and key not in API_13_LIMITS
+                       and key not in API_17_LIMITS)
         if newer:
             add(11, "the values " + ", ".join(newer))
     # --- API 13 -------------------------------------------------------------
@@ -220,6 +223,9 @@ def features(manifest: dict, project=None) -> list:
     # --- API 16 -------------------------------------------------------------
     if "attributes" in manifest:
         add(16, "mod-defined card attributes (\"attributes\")")
+    # --- API 17 -------------------------------------------------------------
+    if isinstance(limits, dict) and "starchip_multiplier" in limits:
+        add(17, "the starchip multiplier locked (\"limits\" \"starchip_multiplier\")")
     return out
 
 

@@ -167,12 +167,13 @@ static Menu menus[MENU_COUNT] = {
               {"Game speed", 0, ITEM_SUBMENU, 0, -1, SUB_SPEED},
               {"Frame rate", 0, ITEM_SUBMENU, 0, -1, SUB_FPS},
               {"Card drops", 0, ITEM_SLIDER, 0, SET_CARD_DROPS, 1, ITEM_GROUP_BREAK},
+              {"Starchip multiplier", 0, ITEM_SLIDER, 0, SET_STARCHIP_MULTIPLIER, 1},
               {"Deck slots...", "F6", ITEM_ACTION, MENU_ITEM_DECKS, -1, 0, ITEM_GROUP_BREAK | ITEM_DISABLED},
               {"Use deck slots", 0, ITEM_CHECK, 0, SET_DECK_SLOTS},
               {"Browse cards with Up/Down", 0, ITEM_CHECK, 0, SET_CARD_BROWSE, 0, ITEM_GROUP_BREAK},
               {"Cheats", 0, ITEM_SUBMENU, 0, -1, SUB_CHEATS, ITEM_GROUP_BREAK},
               {"Language", 0, ITEM_SUBMENU, 0, -1, SUB_LANGUAGE},
-              {"Restart game...", 0, ITEM_ACTION, MENU_ITEM_RESTART, -1, 0, ITEM_GROUP_BREAK | ITEM_DISABLED}}, 11},
+              {"Restart game...", 0, ITEM_ACTION, MENU_ITEM_RESTART, -1, 0, ITEM_GROUP_BREAK | ITEM_DISABLED}}, 12},
     {"View", {{"Fusion helper", 0, ITEM_CHECK, 0, SET_FUSION_HELPER},
               {"Card passwords", 0, ITEM_CHECK, 0, SET_CARD_PASSWORDS},
               {"Library: show every card", 0, ITEM_CHECK, 0, SET_LIBRARY_ALL_CARDS},
@@ -1562,7 +1563,7 @@ static int notice_event(const MenuEvent *event, int *quit)
 }
 
 
-static void update_card_drops_item(void);
+static void update_locked_items(void);
 static int slider_value(const Item *item);
 
 void Menu_Draw(MenuCanvas *into)
@@ -1572,7 +1573,7 @@ void Menu_Draw(MenuCanvas *into)
     if (!ready) {
         return;
     }
-    update_card_drops_item();
+    update_locked_items();
     if (!visible) {
         if (notice.shown) draw_notice();
         return;
@@ -1658,13 +1659,13 @@ void Menu_Draw(MenuCanvas *into)
                 knob = sx + KNOB_R + (setting - minimum) * (SLIDER_W - KNOB_R * 2) / (maximum - minimum);
                 filled = knob - sx;
                 fill(sx, sm - SLIDER_H / 2, SLIDER_W, SLIDER_H, C_TRACK, 255);
-                /* A slider that is off (a mod's Card drops) is grey all
+                /* A slider that is off (a mod's lock) is grey all
                  * through, as its label is. */
                 fill(sx, sm - SLIDER_H / 2, filled, SLIDER_H,
                      disabled ? C_TEXT_DIM : hot ? C_TEXT_ON_ACCENT : C_ACCENT, 255);
                 disc(knob, sm, KNOB_R, C_KNOB_EDGE);
                 disc(knob, sm, KNOB_R - 1, disabled ? C_TEXT_DIM : C_KNOB);
-                snprintf(value, sizeof(value), "%d", setting);
+                snprintf(value, sizeof(value), item->setting == SET_STARCHIP_MULTIPLIER ? "%dx" : "%d", setting);
                 draw_text(sx + SLIDER_W + 12 * ui, middle, value, setting ? ink : dim);
             }
             top += ITEM_H;
@@ -1976,45 +1977,61 @@ static int item_action(const Item *item)
     default: return -1;
     }
 }
-/* Game > Card drops while a mod locks it ("limits": {"card_drops": n},
- * notes/card-drops.md): the row is off, its slider stands at the mod's
+/* Game > Card drops and Starchip multiplier while a mod locks them
+ * ("limits": {"card_drops": n} or {"starchip_multiplier": n},
+ * notes/card-drops.md, notes/gameplay-tables.md): the row is off, its slider stands at the mod's
  * number and its label names the mod. The player's own value stays in the
  * settings, untouched, for when the mod is gone. The lock is read at
  * startup (tables.c), after the menu is made, so this is asked as the menu
  * is drawn and used. */
-static int card_drops_lock;
-static void update_card_drops_item(void)
+static struct {
+    SettingId setting;
+    const char *label;
+    int (*lock)(const char **mod);
+    Item *item;
+    int locked, shown;
+    char text[96];
+} locks[] = {
+    {SET_CARD_DROPS, "Card drops", Tables_CardDropsLock, NULL, 0, -1, ""},
+    {SET_STARCHIP_MULTIPLIER, "Starchip multiplier", Tables_StarchipMultiplierLock, NULL, 0, -1, ""},
+};
+static void update_locked_items(void)
 {
-    static char label[96];
-    static Item *item;
-    static int shown = -1;
-    const char *id = NULL, *name = NULL;
-    int i;
-    card_drops_lock = Tables_CardDropsLock(&id);
-    if (!item) {
-        for (i = 0; i < menus[MENU_GAME].count && !item; i++)
-            if (menus[MENU_GAME].items[i].setting == SET_CARD_DROPS) item = &menus[MENU_GAME].items[i];
-        if (!item) return;
+    size_t k;
+    for (k = 0; k < sizeof(locks) / sizeof(locks[0]); k++) {
+        const char *id = NULL, *name = NULL;
+        Item *item;
+        int i;
+        locks[k].locked = locks[k].lock(&id);
+        if (!locks[k].item) {
+            for (i = 0; i < menus[MENU_GAME].count && !locks[k].item; i++)
+                if (menus[MENU_GAME].items[i].setting == locks[k].setting) locks[k].item = &menus[MENU_GAME].items[i];
+            if (!locks[k].item) continue;
+        }
+        if (locks[k].locked == locks[k].shown) continue;
+        locks[k].shown = locks[k].locked;
+        item = locks[k].item;
+        if (!locks[k].locked) {
+            item->label = locks[k].label;
+            item->flags &= ~ITEM_DISABLED;
+            continue;
+        }
+        for (i = 0; i < Mods_Count() && !name; i++)
+            if (id && !strcmp(Mods_Id(i), id)) name = Mods_Name(i);
+        snprintf(locks[k].text, sizeof(locks[k].text), "%s (set by %.48s)", locks[k].label,
+                 name ? name : id ? id : "a mod");
+        item->label = locks[k].text;
+        item->flags |= ITEM_DISABLED;
     }
-    if (card_drops_lock == shown) return;
-    shown = card_drops_lock;
-    if (!card_drops_lock) {
-        item->label = "Card drops";
-        item->flags &= ~ITEM_DISABLED;
-        return;
-    }
-    for (i = 0; i < Mods_Count() && !name; i++)
-        if (id && !strcmp(Mods_Id(i), id)) name = Mods_Name(i);
-    snprintf(label, sizeof(label), "Card drops (set by %.48s)", name ? name : id ? id : "a mod");
-    item->label = label;
-    item->flags |= ITEM_DISABLED;
 }
 
-/* What a slider shows: Card drops shows a mod's lock in place of the
- * player's own value. */
+/* What a slider shows: Card drops and Starchip multiplier show a mod's lock
+ * in place of the player's own value. */
 static int slider_value(const Item *item)
 {
-    if (item->setting == SET_CARD_DROPS && card_drops_lock) return card_drops_lock;
+    size_t k;
+    for (k = 0; k < sizeof(locks) / sizeof(locks[0]); k++)
+        if (item->setting == locks[k].setting && locks[k].locked) return locks[k].locked;
     return Settings_Get(item->setting);
 }
 
@@ -2037,7 +2054,7 @@ static void update_shortcuts(void)
 int Menu_Event(const MenuEvent *event, int *quit)
 {
     update_shortcuts();
-    update_card_drops_item();
+    update_locked_items();
     if (ready && notice.shown) {
         return notice_event(event, quit);
     }
