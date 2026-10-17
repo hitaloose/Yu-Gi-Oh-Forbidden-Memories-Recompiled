@@ -15,7 +15,7 @@ not upstream.
 ## Features
 
 - Up to 4x internal resolution, widescreen and HD text
-- **3D Monsters**, **AI Hard Mode**, **Hand Camera** and **Yamyi Mods** built in
+- **3D Monsters**, **AI Hard Mode**, **Hand Camera**, **Yamyi Mods** and a **StarChip multiplier** built in
 - Data mods, the **Forbidden Memories HD** pack included (redrawn cards, frames and portraits)
 - Save slots, save states, fusion helper, card drop rates, fast forward
 - **Game > Language**: the European releases' own English, French, German, Italian and Spanish
@@ -43,7 +43,8 @@ To update, unpack the new release over the old one: saves are kept in `user/`.
 
 ### Mods
 
-3D Monsters, AI Hard Mode, Hand Camera and Yamyi Mods are built into the `.nro`. Data mods
+3D Monsters, AI Hard Mode, Hand Camera, Yamyi Mods and StarChip multiplier (off by default: 1x to 100x the StarChips a
+won duel adds to the save) are built into the `.nro`. Data mods
 go in `sdmc:/switch/yfm-redecomp/mods/` and work as on PC. For the HD pack, download
 `yfm-redecomp-hd-mod-<version>.zip` from the [upstream releases](https://github.com/Unchiga/Yu-Gi-Oh-Forbidden-Memories-Recompiled/releases), unpack its
 `mods/assets-hd` there and pick **Internal 2x** or more. Other mods with code do not run on
