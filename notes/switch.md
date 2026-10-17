@@ -53,11 +53,18 @@ slot** choosing the slot. A state is tied to the exact `.nro` that made it
 - **Code mods are linked in.** Horizon gives homebrew no executable memory
   of its own, so a mod's code is never loaded from the SD card. The
   repository's code mods (3D Monsters, AI Hard Mode, Hand Camera, Yamyi
-  Mods) are built into the `.nro` instead, and are turned on and off in
+  Mods, and the fork's own StarChip multiplier) are built into the `.nro`
+  instead, and are turned on and off in
   **Game > Mods** as elsewhere; their folders in `mods/` hold `mod.json` and
   data. Any other code mod stays off, with "is a code mod this game was not
   built with" beside it. Texture packs (the HD pack too), card, fusion,
-  drop and text mods work. The release ZIP ships all five repository mods.
+  drop and text mods work. The release ZIP ships all six repository mods.
+- **StarChip multiplier** (`mods/starchip-multiplier`, the fork's own):
+  off by default; in **Game > Mods** it multiplies the StarChips a won
+  duel adds to the save, 1x to 100x (5x unless set). It uses the upstream
+  StarChip event (`MEMORIES_EVENT_STARCHIP`, API 6) the maintainer took
+  without the mod (PR #181), so the results screen still shows the usual
+  prize; only the balance grows.
 - **HD pack:** put `assets-hd` in `sdmc:/switch/yfm-redecomp/mods/`. At
   internal 1x it is resampled to the console's size and hardly shows; pick
   **Video > Resolution > Internal 2x** or higher. 4x is heavy for the

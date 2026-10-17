@@ -1,0 +1,24 @@
+{
+    "id": "starchip-multiplier",
+    "name": "StarChip multiplier",
+    "version": "1.0",
+    "author": "MegaRedHot, DecompRecomp",
+    "description": "Multiplies the StarChips a won duel adds to the save. The results screen still shows the usual prize; only the balance is scaled (still capped at 999999).",
+    "min_api": 6,
+    "game": "slus_01411",
+    "library": "starchip-multiplier",
+    "enabled": false,
+    "settings": [
+        {
+            "key": "multiplier",
+            "label": "Multiplier",
+            "type": "int",
+            "default": 5,
+            "min": 1,
+            "max": 100,
+            "step": 1,
+            "suffix": "x",
+            "description": "How many times the duel's prize (1 to 5 StarChips from the rank, or a mod's starchip_prize) is added to the save."
+        }
+    ]
+}
