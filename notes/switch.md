@@ -66,6 +66,22 @@ slot** choosing the slot. A state is tied to the exact `.nro` that made it
 - The log goes to `log.txt` in the game's folder, or to the PC's terminal
   when started with `nxlink -s`; each start keeps the last one as
   `log-previous.txt`, so a restart does not lose how the run before it ended.
+- **Fast forward boosts the CPU.** While the game runs above 100% (L3's
+  Turbo, a raised **Speed**, uncapped) the CPU runs at 1785 MHz, the clock
+  the console's own games load at, instead of 1020 MHz; the GPU's clock is
+  the system's. Every game frame is computed and drawn, shown or not, so
+  fast forward with widescreen or a raised internal resolution needs it
+  (`Switch_ClockRateChanged`, `src/pc/platform/switch.c`). The log says
+  `game at 400%: CPU at 1785 MHz`; `MEMORIES_SWITCH_CPU_BOOST=0` keeps
+  the standard clock. A clock tool (sys-clk) that sets its own wins.
+- **`environment.txt`** in `sdmc:/switch/yfm-redecomp/`, `NAME=value` per
+  line (`#` starts a comment), sets the `MEMORIES_*` variables the desktop
+  builds read from the environment, each listed at the top of `log.txt`.
+  `MEMORIES_TRACE=frames` logs where a frame's time goes, every 120 game
+  frames: `game ... us, present ... us per frame`, the game and shown frames
+  per second (`clocks: rate 400, ...`), the software GPU's `draws: ... us
+  per DrawOTag` and, at 2x and up, `OpenGL picture: ... us per replay`.
+  **View > Show HUD** with **Full stats** shows the same numbers on screen.
 - A restart (after the credits, **Apply & restart**) asks the loader to start
   the same `.nro` again, then ends the way quitting does: the clock and the mods
   stop first.

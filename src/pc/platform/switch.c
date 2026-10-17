@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 /* libnx's hook once its services are up, before main and before any
@@ -165,6 +166,27 @@ static void make_folders(void)
     fclose(note);
 }
 
+/* A homebrew gets no environment of its own: environment.txt in
+ * PATHS_SWITCH_DIR, NAME=value per line ('#' starts a comment), stands in
+ * for the MEMORIES_* variables the desktop builds read (MEMORIES_TRACE=frames
+ * for the frame timings, as android.c's does). Read once stderr is the log,
+ * where each variable is listed. */
+static void read_environment(void)
+{
+    char line[1024];
+    FILE *file = fopen(PATHS_SWITCH_DIR "/environment.txt", "r");
+    if (!file) return;
+    while (fgets(line, sizeof(line), file)) {
+        char *equals = strchr(line, '=');
+        line[strcspn(line, "\r\n")] = '\0';
+        if (!equals || equals == line || line[0] == '#') continue;
+        *equals = '\0';
+        setenv(line, equals + 1, 1);
+        fprintf(stderr, "memories-pc: environment.txt: %s=%s\n", line, equals + 1);
+    }
+    fclose(file);
+}
+
 /* Before anything else in main: the player's folders (make_folders), the
  * console's output (stderr: every message the port has before it has a
  * window) to nxlink's terminal when started with `nxlink -s`, otherwise to
@@ -189,6 +211,7 @@ int Switch_EarlyInit(char *why, size_t size)
     }
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+    read_environment();
     {
         /* The linked-in code mods' folders (mod.json), which the Mods menu
          * lists: the .nro alone brings them, and a new one updates them. */
@@ -197,6 +220,91 @@ int Switch_EarlyInit(char *why, size_t size)
         else if (written) fprintf(stderr, "memories-pc: mods: wrote %d built-in mod file(s)\n", written);
     }
     return check_layout(why, size);
+}
+
+/* The CPU at 1785 MHz, the clock the console's own games load at, while the
+ * game runs faster than 100% (Turbo, a raised speed, uncapped): every game
+ * frame is computed and drawn whether it is shown or not, and at the
+ * standard 1020 MHz a fast-forward with widescreen or a raised internal
+ * resolution falls short. The GPU's clock is left as the system sets it.
+ * MEMORIES_SWITCH_CPU_BOOST=0 (environment.txt) keeps the standard clock.
+ * clkrst from 8.0.0, pcv before; the clock found at the first boost is put
+ * back at normal speed and at exit. */
+#define CPU_BOOST_HZ 1785000000u
+static int cpu_state; /* 0 not tried, 1 open, -1 unavailable or turned off */
+static int cpu_boosted;
+static u32 cpu_normal_hz;
+static ClkrstSession cpu_session;
+
+static Result cpu_get(u32 *hz)
+{
+    return hosversionAtLeast(8, 0, 0) ? clkrstGetClockRate(&cpu_session, hz) : pcvGetClockRate(PcvModule_CpuBus, hz);
+}
+
+static Result cpu_set(u32 hz)
+{
+    return hosversionAtLeast(8, 0, 0) ? clkrstSetClockRate(&cpu_session, hz) : pcvSetClockRate(PcvModule_CpuBus, hz);
+}
+
+static void cpu_close(void)
+{
+    if (cpu_state != 1) return;
+    if (cpu_boosted) cpu_set(cpu_normal_hz);
+    cpu_boosted = 0;
+    if (hosversionAtLeast(8, 0, 0)) {
+        clkrstCloseSession(&cpu_session);
+        clkrstExit();
+    } else {
+        pcvExit();
+    }
+    cpu_state = -1;
+}
+
+static int cpu_open(void)
+{
+    const char *asked = getenv("MEMORIES_SWITCH_CPU_BOOST");
+    Result rc;
+    if (cpu_state) return cpu_state == 1;
+    cpu_state = -1;
+    if (asked && !strcmp(asked, "0")) {
+        fprintf(stderr, "memories-pc: CPU boost off (MEMORIES_SWITCH_CPU_BOOST=0)\n");
+        return 0;
+    }
+    if (hosversionAtLeast(8, 0, 0)) {
+        rc = clkrstInitialize();
+        if (R_SUCCEEDED(rc)) {
+            rc = clkrstOpenSession(&cpu_session, PcvModuleId_CpuBus, 3);
+            if (R_FAILED(rc)) clkrstExit();
+        }
+    } else {
+        rc = pcvInitialize();
+    }
+    if (R_SUCCEEDED(rc)) {
+        cpu_state = 1;
+        rc = cpu_get(&cpu_normal_hz);
+        if (R_FAILED(rc) || !cpu_normal_hz) {
+            cpu_close();
+            cpu_state = -1;
+        }
+    }
+    if (cpu_state != 1) {
+        fprintf(stderr, "memories-pc: CPU boost unavailable (0x%x)\n", (unsigned)rc);
+        return 0;
+    }
+    atexit(cpu_close);
+    return 1;
+}
+
+void Switch_ClockRateChanged(int percent)
+{
+    int boost = percent > 100 || percent == -1;
+    u32 hz = 0;
+    if (boost == cpu_boosted || (!boost && cpu_state != 1) || !cpu_open()) return;
+    /* Back to the clock the system had chosen when the boost began. */
+    if (R_FAILED(cpu_set(boost ? CPU_BOOST_HZ : cpu_normal_hz))) return;
+    cpu_boosted = boost;
+    cpu_get(&hz);
+    fprintf(stderr, "memories-pc: game at %d%%: CPU at %u MHz\n", percent, (unsigned)(hz / 1000000u));
 }
 
 /* Mesa's GLES through SDL's renderer, as on Android: sdl.c shows the

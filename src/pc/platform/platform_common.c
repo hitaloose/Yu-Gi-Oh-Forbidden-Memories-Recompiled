@@ -310,6 +310,12 @@ void Platform_SetClockRate(int percent)
     if (percent > 0 && percent < 25) percent = 25;
     rate = percent;
     Monitor_Shared()->paused = percent == 0; /* no VSync is expected: not a freeze */
+#ifdef __SWITCH__
+    {
+        extern void Switch_ClockRateChanged(int percent); /* switch.c: the CPU's clock */
+        Switch_ClockRateChanged(percent);
+    }
+#endif
 }
 
 int Platform_ClockRate(void) { return rate; }
